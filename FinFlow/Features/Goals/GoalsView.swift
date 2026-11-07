@@ -43,13 +43,13 @@ struct GoalsView: View {
     }
     private func load() async { isLoading = true; defer { isLoading = false }; do { goals = try await APIClient.shared.request("/goals"); error = nil } catch { self.error = error.localizedDescription } }
     private func delete(_ goal: FinanceGoal) async {
-        do { try await APIClient.shared.perform("/goals/\(goal.id)", method: "DELETE"); goals.removeAll { $0.id == goal.id } } catch { error = error.localizedDescription }
+        do { try await APIClient.shared.perform("/goals/\(goal.id)", method: "DELETE"); goals.removeAll { $0.id == goal.id } } catch { self.error = error.localizedDescription }
     }
     private func addFunds() async {
         guard let goal = fundingGoal, goal.status == "active", let amount = Double(fundAmount.replacingOccurrences(of: ",", with: ".")), amount.isFinite, amount > 0, amount <= goal.targetAmount - goal.currentAmount else { error = "Ingresa un aporte válido que no supere el saldo pendiente."; fundingGoal = nil; return }
         isFunding = true; defer { isFunding = false }
         do { let updated: FinanceGoal = try await APIClient.shared.request("/goals/\(goal.id)/contribute", method: "PATCH", body: AmountRequest(amount: amount)); if let index = goals.firstIndex(where: { $0.id == goal.id }) { goals[index] = updated }; fundingGoal = nil }
-        catch { error = error.localizedDescription; fundingGoal = nil }
+        catch { self.error = error.localizedDescription; fundingGoal = nil }
     }
 }
 struct GoalFormView: View {
