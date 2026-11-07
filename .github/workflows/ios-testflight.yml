@@ -1,0 +1,174 @@
+name: FinFlow iOS - Device Archive and TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      distribution:
+        description: Build only, or sign and upload to TestFlight
+        required: true
+        type: choice
+        default: unsigned-archive
+        options:
+          - unsigned-archive
+          - testflight
+
+permissions:
+  contents: read
+
+jobs:
+  archive:
+    name: iOS device archive
+    runs-on: macos-15
+    timeout-minutes: 55
+    env:
+      FASTLANE_SKIP_UPDATE_CHECK: "1"
+      FASTLANE_DISABLE_COLORS: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Xcode
+        run: xcodebuild -version
+
+      - name: Validate unsigned device archive
+        if: ${{ inputs.distribution == 'unsigned-archive' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -project FinFlow.xcodeproj -scheme FinFlow \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/FinFlow-unsigned.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO archive
+          test -d "$RUNNER_TEMP/FinFlow-unsigned.xcarchive"
+          echo "Unsigned device archive OK; not installable or App Store ready."
+
+      - name: Verify signing secrets
+        if: ${{ inputs.distribution == 'testflight' }}
+        shell: bash
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_BUNDLE_ID: ${{ secrets.APPLE_BUNDLE_ID }}
+          IOS_DISTRIBUTION_CERT_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERT_BASE64 }}
+          IOS_DISTRIBUTION_CERT_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERT_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8_BASE64 }}
+        run: |
+          set -euo pipefail
+          for name in APPLE_TEAM_ID APPLE_BUNDLE_ID IOS_DISTRIBUTION_CERT_BASE64 \
+            IOS_DISTRIBUTION_CERT_PASSWORD IOS_PROVISIONING_PROFILE_BASE64 \
+            APP_STORE_CONNECT_KEY_ID APP_STORE_CONNECT_ISSUER_ID APP_STORE_CONNECT_API_KEY_P8_BASE64; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Missing GitHub Actions secret: $name"
+              exit 1
+            fi
+          done
+
+      - name: Install certificate and provisioning profile in temporary keychain
+        if: ${{ inputs.distribution == 'testflight' }}
+        shell: bash
+        env:
+          IOS_DISTRIBUTION_CERT_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERT_BASE64 }}
+          IOS_DISTRIBUTION_CERT_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERT_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$IOS_DISTRIBUTION_CERT_BASE64" | base64 -D > "$RUNNER_TEMP/distribution.p12"
+          printf '%s' "$IOS_PROVISIONING_PROFILE_BASE64" | base64 -D > "$RUNNER_TEMP/profile.mobileprovision"
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 32)
+          echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> "$GITHUB_ENV"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/finflow.keychain-db"
+          security set-keychain-settings -lut 21600 "$RUNNER_TEMP/finflow.keychain-db"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/finflow.keychain-db"
+          security import "$RUNNER_TEMP/distribution.p12" -k "$RUNNER_TEMP/finflow.keychain-db" \
+            -P "$IOS_DISTRIBUTION_CERT_PASSWORD" -f pkcs12 -A
+          security set-key-partition-list -S apple-tool:,apple: -s \
+            -k "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/finflow.keychain-db"
+          security list-keychains -d user -s "$RUNNER_TEMP/finflow.keychain-db"
+          security default-keychain -d user -s "$RUNNER_TEMP/finflow.keychain-db"
+          security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" -o "$RUNNER_TEMP/profile.plist"
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/profile.plist")
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/profile.plist")
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$RUNNER_TEMP/profile.mobileprovision" \
+            "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+          echo "PROFILE_UUID=$PROFILE_UUID" >> "$GITHUB_ENV"
+          echo "PROFILE_NAME=$PROFILE_NAME" >> "$GITHUB_ENV"
+
+      - name: Archive signed iOS app and export IPA
+        if: ${{ inputs.distribution == 'testflight' }}
+        shell: bash
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_BUNDLE_ID: ${{ secrets.APPLE_BUNDLE_ID }}
+        run: |
+          set -euo pipefail
+          xcodebuild -project FinFlow.xcodeproj -scheme FinFlow \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/FinFlow.xcarchive" \
+            "DEVELOPMENT_TEAM=$APPLE_TEAM_ID" \
+            "PRODUCT_BUNDLE_IDENTIFIER=$APPLE_BUNDLE_ID" \
+            "PROVISIONING_PROFILE_SPECIFIER=$PROFILE_NAME" \
+            "CODE_SIGN_STYLE=Manual" \
+            "CODE_SIGN_IDENTITY=Apple Distribution" \
+            "CURRENT_PROJECT_VERSION=$GITHUB_RUN_NUMBER" \
+            archive
+          python3 - <<'PY'
+          import os, plistlib
+          options = {
+            "method": "app-store-connect",
+            "signingStyle": "manual",
+            "teamID": os.environ["APPLE_TEAM_ID"],
+            "provisioningProfiles": {os.environ["APPLE_BUNDLE_ID"]: os.environ["PROFILE_NAME"]}
+          }
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "ExportOptions.plist"), "wb") as out:
+            plistlib.dump(options, out)
+          PY
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/FinFlow.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/FinFlowExport"
+          test -f "$RUNNER_TEMP/FinFlowExport/FinFlow.ipa"
+
+      - name: Upload IPA to TestFlight (no automatic distribution)
+        if: ${{ inputs.distribution == 'testflight' }}
+        shell: bash
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8_BASE64 }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$APP_STORE_CONNECT_API_KEY_P8_BASE64" | base64 -D > "$RUNNER_TEMP/AuthKey.p8"
+          chmod 600 "$RUNNER_TEMP/AuthKey.p8"
+          python3 - <<'PY'
+          import os, json
+          data = {
+            "key_id": os.environ["APP_STORE_CONNECT_KEY_ID"],
+            "issuer_id": os.environ["APP_STORE_CONNECT_ISSUER_ID"],
+            "key_filepath": os.path.join(os.environ["RUNNER_TEMP"], "AuthKey.p8"),
+            "in_house": False
+          }
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "app-store-connect.json"), "w") as out:
+            json.dump(data, out)
+          PY
+          gem install fastlane --no-document
+          fastlane pilot upload \
+            --ipa "$RUNNER_TEMP/FinFlowExport/FinFlow.ipa" \
+            --api_key_path "$RUNNER_TEMP/app-store-connect.json" \
+            --skip_submission true
+
+      - name: Remove temporary signing materials
+        if: ${{ always() && inputs.distribution == 'testflight' }}
+        shell: bash
+        run: |
+          if [[ -n "${PROFILE_UUID:-}" ]]; then
+            rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+          fi
+          security delete-keychain "$RUNNER_TEMP/finflow.keychain-db" || true
+          rm -f "$RUNNER_TEMP/distribution.p12" "$RUNNER_TEMP/profile.mobileprovision" \
+            "$RUNNER_TEMP/profile.plist" "$RUNNER_TEMP/AuthKey.p8" \
+            "$RUNNER_TEMP/app-store-connect.json"
