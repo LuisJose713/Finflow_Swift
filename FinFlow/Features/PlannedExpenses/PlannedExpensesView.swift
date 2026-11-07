@@ -99,7 +99,7 @@ struct PlannedExpensesView: View {
             expenses = try await loadedExpenses
             categories = (try? await loadedCategories) ?? []
             error = nil
-        } catch { error = error.localizedDescription }
+        } catch { self.error = error.localizedDescription }
     }
 
     private func save(_ request: PlannedExpenseRequest, editing: PlannedExpense?) async throws {
@@ -115,19 +115,19 @@ struct PlannedExpensesView: View {
             let updated: PlannedExpense = try await APIClient.shared.request("/planned-expenses/\(expense.id)/execute", method: "PATCH")
             replace(updated); executeTarget = nil
             // Backend creates the matching expense transaction atomically.
-        } catch { error = error.localizedDescription; executeTarget = nil }
+        } catch { self.error = error.localizedDescription; executeTarget = nil }
     }
 
     private func cancel(_ expense: PlannedExpense) async {
         isWorking = true; defer { isWorking = false }
         do { let updated: PlannedExpense = try await APIClient.shared.request("/planned-expenses/\(expense.id)/cancel", method: "PATCH"); replace(updated) }
-        catch { error = error.localizedDescription }
+        catch { self.error = error.localizedDescription }
     }
 
     private func delete(_ expense: PlannedExpense) async {
         isWorking = true; defer { isWorking = false }
         do { try await APIClient.shared.perform("/planned-expenses/\(expense.id)", method: "DELETE"); expenses.removeAll { $0.id == expense.id } }
-        catch { error = error.localizedDescription }
+        catch { self.error = error.localizedDescription }
     }
 
     private func replace(_ updated: PlannedExpense) {
