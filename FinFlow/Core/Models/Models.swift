@@ -40,6 +40,7 @@ struct FinanceTransaction: Codable, Identifiable {
     var amount: Double
     var type: String
     var categoryId: Int = 0
+    var accountId: Int? = nil
     var date: String?
     var createdAt: String?
     var notes: String? // Kept for local/offline compatibility; backend Transaction has no notes field.
@@ -47,11 +48,11 @@ struct FinanceTransaction: Codable, Identifiable {
     var status: String?
     var userId: Int?
 
-    enum CodingKeys: String, CodingKey { case id, description, amount, type, categoryId, date, createdAt, notes, currency, status, userId }
+    enum CodingKeys: String, CodingKey { case id, description, amount, type, categoryId, accountId, date, createdAt, notes, currency, status, userId }
 
-    init(id: Int, description: String, amount: Double, type: String, categoryId: Int = 0, date: String? = nil, createdAt: String? = nil, notes: String? = nil, currency: String? = nil, status: String? = nil, userId: Int? = nil) {
+    init(id: Int, description: String, amount: Double, type: String, categoryId: Int = 0, accountId: Int? = nil, date: String? = nil, createdAt: String? = nil, notes: String? = nil, currency: String? = nil, status: String? = nil, userId: Int? = nil) {
         self.id = id; self.description = description; self.amount = amount; self.type = type
-        self.categoryId = categoryId; self.date = date; self.createdAt = createdAt
+        self.categoryId = categoryId; self.accountId = accountId; self.date = date; self.createdAt = createdAt
         self.notes = notes; self.currency = currency; self.status = status; self.userId = userId
     }
 
@@ -62,6 +63,7 @@ struct FinanceTransaction: Codable, Identifiable {
         amount = try c.decodeIfPresent(Double.self, forKey: .amount) ?? 0
         type = try c.decodeIfPresent(String.self, forKey: .type) ?? "expense"
         categoryId = try c.decodeIfPresent(Int.self, forKey: .categoryId) ?? 0
+        accountId = try c.decodeIfPresent(Int.self, forKey: .accountId)
         date = try c.decodeIfPresent(String.self, forKey: .date)
         createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt)
         notes = try c.decodeIfPresent(String.self, forKey: .notes)
@@ -81,6 +83,7 @@ struct CreateTransactionRequest: Codable {
     let categoryId: Int
     let date: String
     let notes: String?
+    var accountId: Int? = nil
     let currency: String = "COP"
     let status: String = "completed"
 }
@@ -244,6 +247,85 @@ struct PlannedExpenseRequest: Encodable {
     let dueDate: String?
     let notes: String?
     let remindAt: String?
+}
+
+
+struct FinancialAccount: Decodable, Identifiable {
+    let id: Int
+    let name: String
+    let type: String
+    let currency: String
+    let openingBalance: Double
+    let balance: Double
+    let archived: Bool
+}
+struct CreateFinancialAccount: Encodable {
+    let name: String
+    let type: String
+    let currency: String = "COP"
+    let openingBalance: Double
+}
+struct UpdateFinancialAccount: Encodable {
+    let name: String
+    let type: String
+}
+struct ArchiveFinancialAccount: Encodable { let archived: Bool }
+struct TransferFunds: Encodable {
+    let fromAccountId: Int
+    let toAccountId: Int
+    let amount: Double
+    let date: String
+    let note: String?
+}
+struct FinancialTransfer: Decodable, Identifiable {
+    let id: Int
+    let fromAccountId: Int
+    let toAccountId: Int
+    let amount: Double
+    let date: String
+    let note: String?
+}
+
+struct RecurringRule: Decodable, Identifiable {
+    let id: Int
+    let title: String
+    let amount: Double
+    let type: String
+    let categoryId: Int
+    let accountId: Int?
+    let dayOfMonth: Int
+    let nextDueDate: String
+    let active: Bool
+}
+struct CreateRecurringRule: Encodable {
+    let title: String
+    let amount: Double
+    let type: String
+    let categoryId: Int
+    let accountId: Int?
+    let dayOfMonth: Int
+}
+struct RecurringActivation: Encodable { let active: Bool }
+struct ProcessRecurringResult: Decodable { let created: Int }
+
+struct GoalContribution: Decodable, Identifiable {
+    let id: Int
+    let goalId: Int
+    let amount: Double
+    let note: String?
+    let createdAt: String?
+}
+struct GoalStatusChange: Encodable { let status: String }
+
+struct PasswordChangeRequest: Encodable {
+    let currentPassword: String
+    let newPassword: String
+    let confirmPassword: String
+}
+struct PasswordConfirmation: Encodable { let password: String }
+struct SecurityActionResponse: Decodable {
+    let status: String
+    let logoutRequired: Bool
 }
 
 struct ChatMessage: Identifiable, Codable { var id = UUID(); var content: String; var role: String; var timestamp = Date() }
