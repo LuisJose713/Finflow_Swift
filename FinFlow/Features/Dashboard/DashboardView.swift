@@ -47,6 +47,23 @@ struct DashboardView: View {
                                 .frame(height: 190)
                             }
                         }
+                        if !stats.categoryData.isEmpty {
+                            SectionCard(title: "Gastos por categoría",
+                                        subtitle: "Operaciones completadas en COP") {
+                                Chart {
+                                    ForEach(Array(stats.categoryData.prefix(6))) { category in
+                                        BarMark(
+                                            x: .value("Importe", category.amount),
+                                            y: .value("Categoría", category.category)
+                                        )
+                                        .foregroundStyle(FinFlowTheme.accent)
+                                    }
+                                }
+                                .chartLegend(.hidden)
+                                .frame(height: CGFloat(min(stats.categoryData.count, 6) * 44 + 35))
+                                .accessibilityLabel("Distribución de gastos por categoría")
+                            }
+                        }
                         SectionCard(title: "Últimos movimientos", subtitle: "Tus transacciones recientes") {
                             if transactions.isEmpty && !isLoading { EmptyState(icon: "tray", title: "Aún no hay movimientos", message: "Registra tus ingresos y gastos para verlos aquí.") }
                             ForEach(Array(transactions.prefix(5))) { transaction in TransactionRow(transaction: transaction) }
