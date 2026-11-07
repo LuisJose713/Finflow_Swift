@@ -6,6 +6,7 @@ struct GoalsView: View {
     @State private var error: String?
     @State private var showingForm = false
     @State private var editingGoal: FinanceGoal?
+    @State private var historyGoal: FinanceGoal?
     @State private var fundingGoal: FinanceGoal?
     @State private var fundAmount = ""
     @State private var isFunding = false
@@ -26,6 +27,7 @@ struct GoalsView: View {
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { editingGoal = nil; showingForm = true } label: { Image(systemName: "plus.circle.fill") } } }
             .task { await load() }
             .sheet(isPresented: $showingForm, onDismiss: { Task { await load() } }) { GoalFormView(goal: editingGoal) }
+            .sheet(item: $historyGoal) { goal in GoalHistoryView(goal: goal) }
             .alert("Agregar fondos", isPresented: Binding(get: { fundingGoal != nil }, set: { if !$0 { fundingGoal = nil } })) {
                 TextField("Monto en COP", text: $fundAmount).keyboardType(.decimalPad)
                 Button("Cancelar", role: .cancel) { fundingGoal = nil }
@@ -37,13 +39,19 @@ struct GoalsView: View {
         SectionCard(title: "\(goal.icon ?? "🎯")  \(goal.name)", subtitle: goal.deadline.isEmpty ? nil : "Fecha objetivo: \(goal.deadline)") {
             HStack(alignment: .firstTextBaseline) { Text(CurrencyFormatter.format(goal.currentAmount)).font(.title3.bold()).foregroundStyle(FinFlowTheme.mint); Spacer(); Text("de \(CurrencyFormatter.format(goal.targetAmount))").font(.caption).foregroundStyle(FinFlowTheme.secondaryText) }
             GeometryReader { proxy in ZStack(alignment: .leading) { Capsule().fill(FinFlowTheme.elevated); Capsule().fill(FinFlowTheme.accent).frame(width: proxy.size.width * goal.progress) } }.frame(height: 8)
-            HStack { Text("\(Int(goal.progress * 100))% completado").font(.caption).foregroundStyle(FinFlowTheme.secondaryText); Spacer(); Menu { if goal.status == "active" { Button("Agregar fondos", systemImage: "plus.circle") { fundingGoal = goal; fundAmount = "" } }; Button("Editar", systemImage: "pencil") { editingGoal = goal; showingForm = true }; Button("Eliminar", systemImage: "trash", role: .destructive) { Task { await delete(goal) } } } label: { Image(systemName: "ellipsis.circle").font(.title3) } }
+            HStack { Text("\(Int(goal.progress * 100))% completado").font(.caption).foregroundStyle(FinFlowTheme.secondaryText); Spacer(); Menu { if goal.status == "active" { Button("Agregar fondos", systemImage: "plus.circle") { fundingGoal = goal; fundAmount = "" } }; Button("Historial de aportes", systemImage: "clock.arrow.circlepath") { historyGoal = goal }; Button("Editar", systemImage: "pencil") { editingGoal = goal; showingForm = true }; if goal.status == "active" { Button("Marcar completada", systemImage: "checkmark.circle") { Task { await setStatus(goal, "completed") } }; Button("Cancelar meta", systemImage: "xmark.circle") { Task { await setStatus(goal, "cancelled") } } } else { Button("Reactivar meta", systemImage: "arrow.counterclockwise") { Task { await setStatus(goal, "active") } } }; Button("Eliminar", systemImage: "trash", role: .destructive) { Task { await delete(goal) } } } label: { Image(systemName: "ellipsis.circle").font(.title3) } }
             if let description = goal.description, !description.isEmpty { Text(description).font(.caption).foregroundStyle(FinFlowTheme.secondaryText) }
         }
     }
     private func load() async { isLoading = true; defer { isLoading = false }; do { goals = try await APIClient.shared.request("/goals"); error = nil } catch { self.error = error.localizedDescription } }
     private func delete(_ goal: FinanceGoal) async {
         do { try await APIClient.shared.perform("/goals/\(goal.id)", method: "DELETE"); goals.removeAll { $0.id == goal.id } } catch { self.error = error.localizedDescription }
+    }
+    private func setStatus(_ goal: FinanceGoal, _ status: String) async {
+        do {
+            let _: FinanceGoal = try await APIClient.shared.request("/goals/\(goal.id)/status", method: "PATCH", body: GoalStatusChange(status: status))
+            await load()
+        } catch { self.error = error.localizedDescription }
     }
     private func addFunds() async {
         guard let goal = fundingGoal, goal.status == "active", let amount = Double(fundAmount.replacingOccurrences(of: ",", with: ".")), amount.isFinite, amount > 0, amount <= goal.targetAmount - goal.currentAmount else { error = "Ingresa un aporte válido que no supere el saldo pendiente."; fundingGoal = nil; return }
@@ -76,5 +84,61 @@ struct GoalFormView: View {
         isSaving = true; defer { isSaving = false }
         let dto = GoalRequest(title: name, targetAmount: targetValue, currentAmount: goal == nil ? currentValue : nil, deadline: DateFormatters.isoDay.string(from: deadline), description: description.isEmpty ? nil : description)
         do { if let goal { let _: FinanceGoal = try await APIClient.shared.request("/goals/\(goal.id)", method: "PUT", body: dto) } else { let _: FinanceGoal = try await APIClient.shared.request("/goals", method: "POST", body: dto) }; dismiss() } catch { self.error = error.localizedDescription }
+    }
+}
+
+struct GoalHistoryView: View {
+    @Environment(\.dismiss) private var dismiss
+    let goal: FinanceGoal
+    @State private var contributions: [GoalContribution] = []
+    @State private var isLoading = true
+    @State private var error: String?
+
+    var body: some View {
+        NavigationStack {
+            ScreenBackground {
+                List {
+                    Section {
+                        LabeledContent("Meta", value: goal.name)
+                        LabeledContent("Ahorro actual", value: CurrencyFormatter.format(goal.currentAmount))
+                    }
+                    if let error { Section { ErrorBanner(message: error) } }
+                    if isLoading {
+                        ProgressView("Cargando aportes…")
+                    } else if contributions.isEmpty {
+                        ContentUnavailableView("Sin aportes registrados",
+                            systemImage: "clock.arrow.circlepath",
+                            description: Text("Los aportes que realices aparecerán aquí."))
+                    } else {
+                        Section("Aportes registrados") {
+                            ForEach(contributions) { contribution in
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text(CurrencyFormatter.format(contribution.amount)).font(.headline)
+                                        Spacer()
+                                        Text(contribution.createdAt?.prefix(10) ?? "")
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    if let note = contribution.note, !note.isEmpty {
+                                        Text(note).font(.subheadline).foregroundStyle(.secondary)
+                                    }
+                                }.padding(.vertical, 4)
+                            }
+                        }
+                    }
+                }.scrollContentBackground(.hidden)
+            }
+            .navigationTitle("Historial de aportes")
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Cerrar") { dismiss() } } }
+            .task { await load() }
+        }
+    }
+    private func load() async {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            contributions = try await APIClient.shared.request("/goals/\(goal.id)/contributions")
+            error = nil
+        } catch { self.error = error.localizedDescription }
     }
 }

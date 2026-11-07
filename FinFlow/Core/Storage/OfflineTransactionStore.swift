@@ -1,7 +1,7 @@
 import Foundation
 
-/// Persistent cache and retry queue for transaction writes made without a connection.
-/// Data is scoped by user ID so accounts never share cached financial records.
+/// Encrypted per-user offline read cache and a preserved legacy write queue.
+/// Writes are never silently replayed until the backend supports idempotency.
 final class OfflineTransactionStore: @unchecked Sendable {
     static let shared = OfflineTransactionStore()
     private let defaults = UserDefaults.standard
@@ -21,14 +21,11 @@ final class OfflineTransactionStore: @unchecked Sendable {
     private func queueKey(userID: Int) -> String { "finflow.offline.queue.\(userID)" }
 
     func cachedTransactions(userID: Int) -> [FinanceTransaction] {
-        guard let data = defaults.data(forKey: cacheKey(userID: userID)),
-              let values = try? decoder.decode([FinanceTransaction].self, from: data) else { return [] }
-        return values
+        readEncryptedOrLegacy([FinanceTransaction].self, at: cacheKey(userID: userID)) ?? []
     }
 
     func saveTransactions(_ transactions: [FinanceTransaction], userID: Int) {
-        guard let data = try? encoder.encode(transactions) else { return }
-        defaults.set(data, forKey: cacheKey(userID: userID))
+        saveEncrypted(transactions, at: cacheKey(userID: userID))
     }
 
     func addPendingCreate(_ request: CreateTransactionRequest, userID: Int) -> FinanceTransaction {
@@ -86,46 +83,39 @@ final class OfflineTransactionStore: @unchecked Sendable {
         return nsError.domain == NSURLErrorDomain
     }
 
-    /// Replays writes in order. A failed operation stays queued for the next refresh.
+    /// Deliberately disabled: replaying a POST after a timeout may duplicate money
+    /// unless the backend offers an idempotency key. Legacy pending entries stay
+    /// encrypted on-device for manual review and are never silently replayed.
     func synchronize(userID: Int) async {
-        var queue = pendingOperations(userID: userID)
-        guard !queue.isEmpty else { return }
-        var remaining: [PendingOperation] = []
-        for operation in queue {
-            do {
-                switch operation.kind {
-                case .create:
-                    guard let payload = operation.request else { continue }
-                    let created: FinanceTransaction = try await APIClient.shared.request("/transactions", method: "POST", body: payload)
-                    var cached = cachedTransactions(userID: userID)
-                    if let temporaryID = operation.transactionID,
-                       let index = cached.firstIndex(where: { $0.id == temporaryID }) {
-                        cached[index] = created
-                    } else if !cached.contains(where: { $0.id == created.id }) {
-                        cached.insert(created, at: 0)
-                    }
-                    saveTransactions(cached, userID: userID)
-                case .delete:
-                    if let id = operation.transactionID {
-                        try await APIClient.shared.perform("/transactions/\(id)", method: "DELETE")
-                        removeFromCache(id: id, userID: userID)
-                    }
-                }
-            } catch {
-                remaining.append(operation)
-            }
-        }
-        saveQueue(remaining, userID: userID)
+        // No network effects until server idempotency is implemented.
     }
 
     private func pendingOperations(userID: Int) -> [PendingOperation] {
-        guard let data = defaults.data(forKey: queueKey(userID: userID)),
-              let values = try? decoder.decode([PendingOperation].self, from: data) else { return [] }
-        return values
+        readEncryptedOrLegacy([PendingOperation].self, at: queueKey(userID: userID)) ?? []
     }
 
     private func saveQueue(_ queue: [PendingOperation], userID: Int) {
-        guard let data = try? encoder.encode(queue) else { return }
-        defaults.set(data, forKey: queueKey(userID: userID))
+        saveEncrypted(queue, at: queueKey(userID: userID))
+    }
+
+    private func readEncryptedOrLegacy<T: Decodable>(_ type: T.Type, at key: String) -> T? {
+        guard let stored = defaults.data(forKey: key) else { return nil }
+
+        if let cleartext = try? SecureCache.open(stored) {
+            return try? decoder.decode(T.self, from: cleartext)
+        }
+        // One-time migration from older app builds that stored plain JSON.
+        // Never remove legacy bytes until encrypted data can be written.
+        guard let legacy = try? decoder.decode(T.self, from: stored) else { return nil }
+        if let encrypted = try? SecureCache.seal(stored) {
+            defaults.set(encrypted, forKey: key)
+        }
+        return legacy
+    }
+
+    private func saveEncrypted<T: Encodable>(_ value: T, at key: String) {
+        guard let raw = try? encoder.encode(value),
+              let encrypted = try? SecureCache.seal(raw) else { return }
+        defaults.set(encrypted, forKey: key)
     }
 }
