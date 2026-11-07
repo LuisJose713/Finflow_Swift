@@ -13,6 +13,13 @@ struct SettingsView: View {
                         LabeledContent("Correo", value: session.user?.email ?? "")
                         Button("Cerrar sesión", role: .destructive) { showingLogout = true }
                     }
+                    Section("Privacidad y protección") {
+                        NavigationLink {
+                            SecurityView()
+                        } label: {
+                            Label("Contraseña y sesiones", systemImage: "lock.shield")
+                        }
+                    }
                     Section("Apariencia") {
                         Picker("Tema", selection: $appearance) {
                             Text("Del sistema").tag("system")
