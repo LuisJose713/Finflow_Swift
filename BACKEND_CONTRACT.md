@@ -27,6 +27,12 @@ Versión revisada el 7 de noviembre de 2026 contra los controladores del reposit
 | Aportes | PATCH /goals/{id}/contribute | `{amount,note?}` → Goal |
 | Historial de abonos | GET /goals/{id}/contributions | Lista de abonos |
 | Estado meta | PATCH /goals/{id}/status | `{status}` → Goal |
+| Billeteras COP | GET/POST /accounts, PUT /accounts/{id}, PATCH /accounts/{id}/archive | FinancialAccount: id,name,type,currency,openingBalance,balance,archived |
+| Transferencias propias | GET/POST /accounts/transfers | TransferFunds / FinancialTransfer; atomicidad y saldo comprobados por servidor |
+| Recurrentes | GET/POST /recurring, PATCH /recurring/{id}/active, DELETE /recurring/{id} | Rule con nextDueDate, type, dayOfMonth, categoryId, accountId?, active |
+| Vencimientos | POST /recurring/process-due | `{created}`; servidor evita registros duplicados por vencimiento |
+| Cambio de contraseña | POST /auth/change-password | `{currentPassword,newPassword,confirmPassword}` → `{status,logoutRequired}` |
+| Cierre global de sesiones | POST /auth/revoke-sessions | `{password}` → `{status,logoutRequired}`; token_version invalida JWT previos |
 | Presupuesto mensual | GET /budgets?year&month | BudgetOverview[] con `limitAmount,spent,remaining,percentUsed,status,currency` |
 | Crear presupuesto | POST /budgets | `{categoryId,year,month,amount}` → MonthlyBudget |
 | Editar límite | PUT /budgets/{id} | `{amount}` → MonthlyBudget |
@@ -46,6 +52,8 @@ Versión revisada el 7 de noviembre de 2026 contra los controladores del reposit
 - Tipos de categoría se comparan sin distinguir mayúsculas/minúsculas (`Expense`, `Income`).
 - `TransactionRequest` no persiste `notes`; `Goal` no persiste icono.
 - El gasto de presupuesto lo calcula Spring Boot para COP y solo operaciones de tipo expense completadas.
+- Las estadísticas de movimientos también devuelven categoryData con porcentajes reales y omiten movimientos no completados o monedas no COP.
+- La caché financiera iOS es cifrada de solo lectura en modo offline; las operaciones no se reenvían automáticamente después de respuestas ambiguas.
 
 ## No confundir compilación con despliegue
 
