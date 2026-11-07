@@ -7,12 +7,14 @@ struct AppUser: Codable, Identifiable {
     var avatar: String? = nil
     var currency: String = "COP"
     var theme: String = "system"
+    var role: String = "USER"
+    var isAdmin: Bool { role == "ADMIN" }
 
-    enum CodingKeys: String, CodingKey { case id, email, name, avatar, currency, theme }
+    enum CodingKeys: String, CodingKey { case id, email, name, avatar, currency, theme, role }
 
-    init(id: Int, email: String, name: String, avatar: String? = nil, currency: String = "COP", theme: String = "system") {
+    init(id: Int, email: String, name: String, avatar: String? = nil, currency: String = "COP", theme: String = "system", role: String = "USER") {
         self.id = id; self.email = email; self.name = name
-        self.avatar = avatar; self.currency = currency; self.theme = theme
+        self.avatar = avatar; self.currency = currency; self.theme = theme; self.role = role
     }
 
     init(from decoder: Decoder) throws {
@@ -23,6 +25,7 @@ struct AppUser: Codable, Identifiable {
         avatar = try c.decodeIfPresent(String.self, forKey: .avatar)
         currency = try c.decodeIfPresent(String.self, forKey: .currency) ?? "COP"
         theme = try c.decodeIfPresent(String.self, forKey: .theme) ?? "system"
+        role = try c.decodeIfPresent(String.self, forKey: .role) ?? "USER"
     }
 }
 
@@ -71,7 +74,7 @@ struct FinanceTransaction: Codable, Identifiable {
 }
 
 /// Fields accepted by TransactionRequest. The backend currently does not persist notes.
-struct CreateTransactionRequest: Encodable {
+struct CreateTransactionRequest: Codable {
     let description: String
     let amount: Double
     let type: String
@@ -103,7 +106,67 @@ struct TransactionStats: Decodable {
 }
 struct MonthlyData: Decodable, Identifiable { var month: String; var income: Double; var expenses: Double; var id: String { month } }
 struct CategoryData: Decodable, Identifiable { var category: String; var amount: Double; var percentage: Double; var id: String { category } }
-struct FinanceCategory: Codable, Identifiable { let id: Int; let name: String; let type: String }
+struct FinanceCategory: Codable, Identifiable {
+    let id: Int
+    let name: String
+    let type: String
+    let userId: Int?
+    let createdAt: String?
+    var isSystem: Bool { userId == nil }
+}
+struct CategoryMutation: Encodable {
+    let name: String
+    let type: String
+}
+
+struct BudgetOverview: Decodable, Identifiable {
+    let id: Int
+    let categoryId: Int
+    let categoryName: String
+    let year: Int
+    let month: Int
+    let limitAmount: Double
+    let spent: Double
+    let remaining: Double
+    let percentUsed: Int
+    let status: String
+    let currency: String
+    var progress: Double {
+        guard limitAmount > 0 else { return 0 }
+        return min(max(spent / limitAmount, 0), 1)
+    }
+}
+struct CreateBudgetRequest: Encodable {
+    let categoryId: Int
+    let year: Int
+    let month: Int
+    let amount: Double
+}
+struct UpdateBudgetLimitRequest: Encodable {
+    let amount: Double
+}
+
+struct AdminOverview: Decodable {
+    let users: Int
+    let newUsers30Days: Int
+    let activeUsers30Days: Int
+    let transactions: Int
+    let transactions30Days: Int
+    let incomeTransactions: Int
+    let expenseTransactions: Int
+    let goals: Int
+    let plannedExpenses: Int
+    let pendingExpenses: Int
+    let customCategories: Int
+    let systemCategories: Int
+    let monthlyActivity: [AdminMonthlyActivity]
+}
+struct AdminMonthlyActivity: Decodable, Identifiable {
+    let month: String
+    let signups: Int
+    let transactions: Int
+    var id: String { month }
+}
 
 /// Maps backend Goal.title to the user-facing name. Icon is local presentation only;
 /// the current backend Goal entity does not expose an icon field.
@@ -136,7 +199,7 @@ struct FinanceGoal: Decodable, Identifiable {
 struct GoalRequest: Encodable {
     let title: String
     let targetAmount: Double
-    let currentAmount: Double
+    let currentAmount: Double?
     let deadline: String
     let description: String?
     let status: String? = nil

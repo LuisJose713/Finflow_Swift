@@ -1,42 +1,52 @@
 # FinFlow iOS — SwiftUI
 
-Frontend nativo de FinFlow migrado desde Flutter a SwiftUI y conectado al backend Spring Boot `WS_FINFLOW`.
+Aplicación financiera **nativa para iPhone e iPad**, desarrollada en SwiftUI. Comparte el backend `WS_FINFLOW` (Java/Spring Boot, Render, Neon) con FinFlow Web. **No es un WebView ni una copia de Angular.**
 
 ## Requisitos
 
-- Xcode compatible con iOS 17 o posterior.
-- Swift 6 language mode (el toolchain exacto lo determina la versión de Xcode instalada).
-- Una cuenta Apple Developer solo es necesaria para ciertos flujos de firma/distribución; para ejecutar en simulador basta configurar Xcode.
+- Xcode compatible con el proyecto, iOS/iPadOS 17 o posterior y Swift 6.
+- Para probar en simulador no se necesitan certificados de Apple Developer.
+- Para distribuir mediante TestFlight/App Store se requieren firma, provisioning, Team ID y credenciales de App Store Connect.
 
-## Abrir
+## Funciones
 
-1. Descomprime el ZIP en macOS.
-2. Abre `FinFlow.xcodeproj` en Xcode.
-3. Selecciona el esquema `FinFlow` y un simulador de iPhone o un dispositivo.
-4. Configura `Signing & Capabilities` con tu equipo.
-5. Ejecuta con **Run**.
+| Área | Estado |
+|---|---|
+| Login/registro; Keychain; recuperar sesión con `/auth/me` | Implementado |
+| Dashboard, gráficos, movimientos, PDF y CSV | Implementado |
+| Metas, aportaciones y validación del saldo pendiente | Implementado |
+| Gastos planificados | Implementado |
+| Categorías propias y categorías globales de solo lectura | Implementado |
+| Presupuestos mensuales, límites, alertas a partir del 80% | Implementado |
+| Administración mediante rol ADMIN | Implementado |
+| Chat del asesor IA | Implementado; depende del servicio externo |
+| Cuentas/billeteras | Pendiente: requiere contrato de API |
+| Push y TestFlight/App Store | Pendiente: requiere configuración de distribución |
 
-La URL inicial de API es `https://finflow-backend-yqhi.onrender.com`; se puede cambiar desde Ajustes.
+## Privacidad y seguridad
 
-## Funcionalidades
+- API fija en `https://finflow-backend-yqhi.onrender.com`; no se permite cambiarla a hosts arbitrarios desde Ajustes.
+- Todas las operaciones se autorizan con `Authorization: Bearer`; **nunca** se usa `X-User-Id` como fuente de identidad.
+- El servidor valida el JWT y confirma el rol con `GET /auth/me`; la app no se autentica por los datos guardados localmente.
+- Token en Keychain. Las credenciales de Apple y de Neon/Render no van al repositorio.
+- La app nativa utiliza la API compartida, no abre conexiones directas a Neon.
 
-- Registro e inicio de sesión con JWT y `X-Client-Type: mobile`.
-- Token almacenado en Keychain.
-- Dashboard con balance, ingresos, gastos, tasa de ahorro, movimientos y evolución mensual.
-- Movimientos: crear, eliminar, buscar, filtrar por tipo/mes/año/categoría y exportar PDF/CSV.
-- Caché local y cola de reintentos para crear/eliminar movimientos sin conexión.
-- Metas financieras: listar, crear, editar, eliminar y aportar fondos.
-- Gastos planificados conectados al backend: listar, crear, editar, ejecutar, cancelar y eliminar; los recordatorios/fechas y la categoría se envían al servidor.
-- Asesor IA mediante `/ai/chat`.
-- Ajustes de conexión y apariencia.
+## GitHub Actions: compilación real sin Mac propio
 
-## Estado de validación
+`.github/workflows/ios-ci.yml` compila con Xcode sobre `macos-15`, instala la aplicación en un simulador iPhone, ejecuta el launch smoke test y sube una captura de pantalla (si la prueba termina bien). Se ejecuta en push a main y en PR.
 
-Se realizó parseo sintáctico de los archivos Swift y pruebas de decodificación JSON con muestras que reflejan las entidades del backend. **Este entorno no dispone de Xcode ni del SDK de iOS**, por lo que todavía se debe abrir y compilar el proyecto en Xcode y ejecutar pruebas integradas contra Render. No se declara compilación de iOS ni prueba de extremo a extremo completada.
+Ve a [GitHub Actions](https://github.com/LuisJose713/Finflow_Swift/actions), abre **FinFlow iOS CI**, consulta los resultados o descarga la captura desde *Artifacts*.
 
-## Limitaciones del backend actual
+El archivo generado con una compilación **para simulador** no es un IPA distribuible. Se necesitan credenciales y firma de distribución para TestFlight.
 
-- La entidad `Transaction` y `TransactionRequest` no tienen campo `notes`; la app no presenta notas en el formulario de movimientos porque el backend no las persiste.
-- `Goal` no contiene campo `icon`; el icono de meta se presenta con un valor visual predeterminado y no se sincroniza.
-- `TransactionStats.categoryData` actualmente se devuelve vacío desde el servicio Java; el frontend no inventa esos datos.
-- La sincronización offline implementada cubre operaciones de crear y eliminar movimientos; no se afirma que todas las funciones estén disponibles sin conexión.
+## Abrir localmente
+
+1. Abre `FinFlow.xcodeproj` en un Mac con Xcode.
+2. Selecciona el esquema `FinFlow` y un iPhone Simulator.
+3. Ejecuta con **Run**.
+
+## Sincronización y limitaciones
+
+La caché offline actual es específica de cada usuario y tiene una cola de reintentos para movimientos. **Los reintentos de creación aún no tienen garantía de idempotencia del servidor**; ese punto debe resolverse antes de prometer sincronización financiera offline libre de duplicados.
+
+Consulta [la matriz de paridad web-iOS](docs/WEB_IOS_PARITY_2026-11-07.md) y el [contrato de API](BACKEND_CONTRACT.md) para estado y pendientes. La validación manual con cuentas de prueba sigue siendo necesaria, y el backend debe tener los endpoints nuevos desplegados.

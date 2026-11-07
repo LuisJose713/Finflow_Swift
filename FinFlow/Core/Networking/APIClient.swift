@@ -16,17 +16,14 @@ enum APIError: LocalizedError {
 final class APIClient: @unchecked Sendable {
     static let shared = APIClient()
     private let session: URLSession
-    private let defaultsKey = "finflow.apiBaseURL"
     private init() {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 35
         config.timeoutIntervalForResource = 60
         session = URLSession(configuration: config)
     }
-    var baseURL: String {
-        get { UserDefaults.standard.string(forKey: defaultsKey) ?? "https://finflow-backend-yqhi.onrender.com" }
-        set { UserDefaults.standard.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "/")), forKey: defaultsKey) }
-    }
+    // Fixed HTTPS API origin; arbitrary hosts must never receive bearer credentials.
+    let baseURL = "https://finflow-backend-yqhi.onrender.com"
 
     func request<T: Decodable>(_ path: String, method: String = "GET", body: Encodable? = nil, query: [String: String] = [:], responseType: T.Type = T.self) async throws -> T {
         guard var components = URLComponents(string: baseURL + path) else { throw APIError.invalidURL }
@@ -65,17 +62,12 @@ final class APIClient: @unchecked Sendable {
         }
     }
 
-    /// All protected endpoints use the same auth context. The backend's goal and
-    /// planned-expense controllers additionally require X-User-Id.
+    /// The backend resolves ownership exclusively from the verified bearer JWT.
     private func applyHeaders(to request: inout URLRequest, hasJSONBody: Bool) {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("mobile", forHTTPHeaderField: "X-Client-Type")
         if hasJSONBody { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
         if let token = TokenStore.shared.read("token"), !token.isEmpty {
             request.setValue("Bearer \(token.trimmingCharacters(in: .whitespacesAndNewlines))", forHTTPHeaderField: "Authorization")
-        }
-        if let userId = TokenStore.shared.read("userId"), !userId.isEmpty {
-            request.setValue(userId, forHTTPHeaderField: "X-User-Id")
         }
     }
 

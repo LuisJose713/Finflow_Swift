@@ -41,7 +41,7 @@ struct AdvisorView: View {
     }
     private func messageBubble(_ message: ChatMessage) -> some View {
         HStack { if message.role != "user" { Spacer(minLength: 35) }
-            Text(message.content).textSelection(.enabled).padding(13).foregroundStyle(.white).background(message.role == "user" ? FinFlowTheme.accent : FinFlowTheme.surface, in: RoundedRectangle(cornerRadius: 16))
+            Text(message.content).textSelection(.enabled).padding(13).foregroundStyle(message.role == "user" ? Color.white : Color.primary).background(message.role == "user" ? FinFlowTheme.accent : FinFlowTheme.surface, in: RoundedRectangle(cornerRadius: 16))
             if message.role == "user" { Spacer(minLength: 35) }
         }
     }

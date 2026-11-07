@@ -2,8 +2,6 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var session: SessionStore
-    @State private var apiURL = APIClient.shared.baseURL
-    @State private var saved = false
     @State private var showingLogout = false
     @AppStorage("finflow.appearance") private var appearance = "system"
     var body: some View {
@@ -23,14 +21,10 @@ struct SettingsView: View {
                         }
                         .pickerStyle(.segmented)
                     }
-                    Section("Conexión") {
-                        TextField("URL base de la API", text: $apiURL, axis: .vertical).textInputAutocapitalization(.never).keyboardType(.URL).autocorrectionDisabled()
-                        Button("Guardar dirección del servidor") {
-                            APIClient.shared.baseURL = apiURL
-                            saved = true
-                        }
-                        if saved { Label("Dirección guardada", systemImage: "checkmark.circle.fill").foregroundStyle(FinFlowTheme.mint).font(.caption) }
-                        Text("FinFlow usa el backend de Render por defecto. Cambia esta dirección solo si migras el servidor.").font(.caption).foregroundStyle(.secondary)
+                    Section("Conexión segura") {
+                        Label("Servidor oficial de FinFlow", systemImage: "lock.shield")
+                        Text(APIClient.shared.baseURL).font(.caption).foregroundStyle(.secondary)
+                        Text("Por seguridad, la app no envía tus credenciales a servidores personalizados.").font(.caption).foregroundStyle(.secondary)
                     }
                     Section("Acerca de") {
                         LabeledContent("Aplicación", value: "FinFlow iOS")
