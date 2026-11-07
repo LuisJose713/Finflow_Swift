@@ -7,7 +7,10 @@ struct RootView: View {
     var body: some View {
         Group {
             if isChecking {
-                ZStack { FinFlowTheme.background.ignoresSafeArea(); ProgressView("Preparando FinFlow…") }
+                ZStack {
+                    FinFlowTheme.background.ignoresSafeArea()
+                    ProgressView("Preparando FinFlow…")
+                }
             } else if session.isAuthenticated {
                 MainTabView()
             } else {
@@ -21,16 +24,73 @@ struct RootView: View {
     }
 }
 
+/// Five clear destinations on iPhone. Secondary features live in "Más";
+/// native SwiftUI navigation adapts naturally to iPad.
 struct MainTabView: View {
     var body: some View {
         TabView {
-            DashboardView().tabItem { Label("Inicio", systemImage: "chart.pie.fill") }
-            TransactionsView().tabItem { Label("Movimientos", systemImage: "arrow.left.arrow.right") }
-            GoalsView().tabItem { Label("Metas", systemImage: "scope") }
-            PlannedExpensesView().tabItem { Label("Planificados", systemImage: "calendar.badge.clock") }
-            AdvisorView().tabItem { Label("Asesor IA", systemImage: "sparkles") }
+            DashboardView()
+                .tabItem { Label("Inicio", systemImage: "chart.pie.fill") }
+            TransactionsView()
+                .tabItem { Label("Movimientos", systemImage: "arrow.left.arrow.right") }
+            GoalsView()
+                .tabItem { Label("Metas", systemImage: "scope") }
+            BudgetsView()
+                .tabItem { Label("Presupuestos", systemImage: "chart.bar.xaxis") }
+            MoreView()
+                .tabItem { Label("Más", systemImage: "square.grid.2x2.fill") }
         }
         .toolbarBackground(FinFlowTheme.surface, for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
+    }
+}
+
+struct MoreView: View {
+    @EnvironmentObject private var session: SessionStore
+
+    var body: some View {
+        NavigationStack {
+            ScreenBackground {
+                List {
+                    Section("Organiza tus finanzas") {
+                        NavigationLink {
+                            CategoriesView()
+                        } label: {
+                            Label("Categorías", systemImage: "square.grid.2x2")
+                        }
+                        NavigationLink {
+                            PlannedExpensesView()
+                        } label: {
+                            Label("Gastos planificados", systemImage: "calendar.badge.clock")
+                        }
+                    }
+
+                    Section("Más herramientas") {
+                        NavigationLink {
+                            AdvisorView()
+                        } label: {
+                            Label("Asesor financiero IA", systemImage: "sparkles")
+                        }
+                        NavigationLink {
+                            SettingsView()
+                        } label: {
+                            Label("Ajustes y privacidad", systemImage: "gearshape")
+                        }
+                    }
+
+                    if session.user?.isAdmin == true {
+                        Section("Administración") {
+                            NavigationLink {
+                                AdminView()
+                            } label: {
+                                Label("Panel administrador", systemImage: "lock.shield")
+                            }
+                        }
+                    }
+                }
+                .scrollContentBackground(.hidden)
+            }
+            .navigationTitle("Más")
+        }
     }
 }
