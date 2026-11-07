@@ -7,12 +7,14 @@ struct AppUser: Codable, Identifiable {
     var avatar: String? = nil
     var currency: String = "COP"
     var theme: String = "system"
+    var role: String = "USER"
+    var isAdmin: Bool { role == "ADMIN" }
 
-    enum CodingKeys: String, CodingKey { case id, email, name, avatar, currency, theme }
+    enum CodingKeys: String, CodingKey { case id, email, name, avatar, currency, theme, role }
 
-    init(id: Int, email: String, name: String, avatar: String? = nil, currency: String = "COP", theme: String = "system") {
+    init(id: Int, email: String, name: String, avatar: String? = nil, currency: String = "COP", theme: String = "system", role: String = "USER") {
         self.id = id; self.email = email; self.name = name
-        self.avatar = avatar; self.currency = currency; self.theme = theme
+        self.avatar = avatar; self.currency = currency; self.theme = theme; self.role = role
     }
 
     init(from decoder: Decoder) throws {
@@ -23,6 +25,7 @@ struct AppUser: Codable, Identifiable {
         avatar = try c.decodeIfPresent(String.self, forKey: .avatar)
         currency = try c.decodeIfPresent(String.self, forKey: .currency) ?? "COP"
         theme = try c.decodeIfPresent(String.self, forKey: .theme) ?? "system"
+        role = try c.decodeIfPresent(String.self, forKey: .role) ?? "USER"
     }
 }
 
@@ -71,7 +74,7 @@ struct FinanceTransaction: Codable, Identifiable {
 }
 
 /// Fields accepted by TransactionRequest. The backend currently does not persist notes.
-struct CreateTransactionRequest: Encodable {
+struct CreateTransactionRequest: Codable {
     let description: String
     let amount: Double
     let type: String
@@ -136,7 +139,7 @@ struct FinanceGoal: Decodable, Identifiable {
 struct GoalRequest: Encodable {
     let title: String
     let targetAmount: Double
-    let currentAmount: Double
+    let currentAmount: Double?
     let deadline: String
     let description: String?
     let status: String? = nil
