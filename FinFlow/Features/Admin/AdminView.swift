@@ -20,6 +20,14 @@ struct AdminView: View {
                                    title: "Acceso restringido",
                                    message: "Solo la cuenta administradora puede consultar este panel.")
                     } else {
+                        NavigationLink {
+                            AdminBillingView()
+                        } label: {
+                            Label("Administrar planes, precios y promociones", systemImage: "crown.fill")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(14)
+                                .background(FinFlowTheme.surface, in: RoundedRectangle(cornerRadius: 15))
+                        }
                         if let error {
                             ErrorBanner(message: error)
                             Button("Volver a intentar") { Task { await load() } }

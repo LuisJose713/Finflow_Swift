@@ -11,6 +11,16 @@ struct SettingsView: View {
                     Section("Cuenta") {
                         LabeledContent("Nombre", value: session.user?.name ?? "Usuario")
                         LabeledContent("Correo", value: session.user?.email ?? "")
+                        NavigationLink {
+                            ProfileView()
+                        } label: {
+                            Label("Editar nombre y correo", systemImage: "person.crop.circle")
+                        }
+                        NavigationLink {
+                            BillingView()
+                        } label: {
+                            Label("Mi plan y promociones", systemImage: "crown")
+                        }
                         Button("Cerrar sesión", role: .destructive) { showingLogout = true }
                     }
                     Section("Privacidad y protección") {
@@ -18,6 +28,11 @@ struct SettingsView: View {
                             SecurityView()
                         } label: {
                             Label("Contraseña y sesiones", systemImage: "lock.shield")
+                        }
+                        NavigationLink {
+                            PrivacyRightsView()
+                        } label: {
+                            Label("Mis derechos y datos", systemImage: "hand.raised")
                         }
                     }
                     Section("Apariencia") {

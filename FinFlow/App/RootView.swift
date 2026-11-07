@@ -89,6 +89,11 @@ struct MoreView: View {
 
                     Section("Más herramientas") {
                         NavigationLink {
+                            BillingView()
+                        } label: {
+                            Label("Planes Free y Pro", systemImage: "crown")
+                        }
+                        NavigationLink {
                             AdvisorView()
                         } label: {
                             Label("Asesor financiero IA", systemImage: "sparkles")
