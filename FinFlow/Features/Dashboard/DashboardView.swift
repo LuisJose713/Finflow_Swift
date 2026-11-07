@@ -25,6 +25,23 @@ struct DashboardView: View {
                                 metric("Gastos", amount: stats.totalExpenses, icon: "arrow.up.right", color: FinFlowTheme.danger)
                             }
                         }
+                        NavigationLink { DisponibleView() } label: {
+                            HStack(spacing: 14) {
+                                Image(systemName: "wallet.bifold.fill").font(.title2).foregroundStyle(.white)
+                                    .frame(width: 44, height: 44)
+                                    .background(FinFlowTheme.accent, in: RoundedRectangle(cornerRadius: 12))
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("FinFlow Disponible").font(.headline).foregroundStyle(.primary)
+                                    Text("¿Cuánto puedes gastar hasta tu próximo ingreso?")
+                                        .font(.caption).foregroundStyle(FinFlowTheme.secondaryText)
+                                }
+                                Spacer(minLength: 4)
+                                Image(systemName: "chevron.right").foregroundStyle(FinFlowTheme.accent)
+                            }
+                            .padding(16)
+                            .background(FinFlowTheme.surface, in: RoundedRectangle(cornerRadius: 18))
+                        }
+                        .accessibilityIdentifier("dashboard.disponible")
                         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                             summaryCard("Tasa de ahorro", value: String(format: "%.1f%%", stats.savingsRate), icon: "chart.line.uptrend.xyaxis", color: FinFlowTheme.accent)
                             summaryCard("Movimientos", value: "\(transactions.count)", icon: "arrow.left.arrow.right", color: FinFlowTheme.mint)

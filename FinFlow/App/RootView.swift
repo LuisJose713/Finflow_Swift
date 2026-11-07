@@ -66,6 +66,11 @@ struct MoreView: View {
                 List {
                     Section("Organiza tus finanzas") {
                         NavigationLink {
+                            DisponibleView()
+                        } label: {
+                            Label("Mi dinero disponible", systemImage: "wallet.bifold.fill")
+                        }
+                        NavigationLink {
                             AccountsView()
                         } label: {
                             Label("Cuentas y billeteras", systemImage: "wallet.pass")
