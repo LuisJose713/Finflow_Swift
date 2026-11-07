@@ -31,7 +31,7 @@ struct AppUser: Codable, Identifiable {
 
 struct AuthResponse: Decodable { let token: String; let user: AppUser }
 struct LoginRequest: Encodable { let email: String; let password: String }
-struct RegisterRequest: Encodable { let name: String; let email: String; let password: String }
+struct RegisterRequest: Encodable { let name: String; let email: String; let password: String; let privacyAccepted: Bool; let privacyVersion: String; let marketingConsent: Bool }
 
 /// Mirrors the Transaction entity returned by the Spring Boot API.
 struct FinanceTransaction: Codable, Identifiable {

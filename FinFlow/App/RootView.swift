@@ -12,7 +12,19 @@ struct RootView: View {
                     ProgressView("Preparando FinFlow…")
                 }
             } else if session.isAuthenticated {
-                MainTabView()
+                switch session.privacyAccess {
+                case .loading:
+                    ZStack {
+                        FinFlowTheme.background.ignoresSafeArea()
+                        ProgressView("Verificando tu privacidad…")
+                    }
+                case .accepted:
+                    MainTabView()
+                case .needsConsent:
+                    PrivacyConsentGate()
+                case .unavailable:
+                    PrivacyUnavailableView()
+                }
             } else {
                 AuthView()
             }
@@ -76,6 +88,11 @@ struct MoreView: View {
                     }
 
                     Section("Más herramientas") {
+                        NavigationLink {
+                            BillingView()
+                        } label: {
+                            Label("Planes Free y Pro", systemImage: "crown")
+                        }
                         NavigationLink {
                             AdvisorView()
                         } label: {
