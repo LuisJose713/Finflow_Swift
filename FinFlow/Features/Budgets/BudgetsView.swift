@@ -182,7 +182,7 @@ struct BudgetsView: View {
             budgets.removeAll { $0.id == budget.id }
             deleting = nil
         } catch {
-            error = error.localizedDescription
+            self.error = error.localizedDescription
             deleting = nil
         }
     }
