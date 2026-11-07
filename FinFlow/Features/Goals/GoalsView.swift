@@ -37,7 +37,7 @@ struct GoalsView: View {
         SectionCard(title: "\(goal.icon ?? "🎯")  \(goal.name)", subtitle: goal.deadline.isEmpty ? nil : "Fecha objetivo: \(goal.deadline)") {
             HStack(alignment: .firstTextBaseline) { Text(CurrencyFormatter.format(goal.currentAmount)).font(.title3.bold()).foregroundStyle(FinFlowTheme.mint); Spacer(); Text("de \(CurrencyFormatter.format(goal.targetAmount))").font(.caption).foregroundStyle(FinFlowTheme.secondaryText) }
             GeometryReader { proxy in ZStack(alignment: .leading) { Capsule().fill(FinFlowTheme.elevated); Capsule().fill(FinFlowTheme.accent).frame(width: proxy.size.width * goal.progress) } }.frame(height: 8)
-            HStack { Text("\(Int(goal.progress * 100))% completado").font(.caption).foregroundStyle(FinFlowTheme.secondaryText); Spacer(); Menu { Button("Agregar fondos", systemImage: "plus.circle") { fundingGoal = goal; fundAmount = "" }; Button("Editar", systemImage: "pencil") { editingGoal = goal; showingForm = true }; Button("Eliminar", systemImage: "trash", role: .destructive) { Task { await delete(goal) } } } label: { Image(systemName: "ellipsis.circle").font(.title3) } }
+            HStack { Text("\(Int(goal.progress * 100))% completado").font(.caption).foregroundStyle(FinFlowTheme.secondaryText); Spacer(); Menu { if goal.status == "active" { Button("Agregar fondos", systemImage: "plus.circle") { fundingGoal = goal; fundAmount = "" } }; Button("Editar", systemImage: "pencil") { editingGoal = goal; showingForm = true }; Button("Eliminar", systemImage: "trash", role: .destructive) { Task { await delete(goal) } } } label: { Image(systemName: "ellipsis.circle").font(.title3) } }
             if let description = goal.description, !description.isEmpty { Text(description).font(.caption).foregroundStyle(FinFlowTheme.secondaryText) }
         }
     }
@@ -46,14 +46,12 @@ struct GoalsView: View {
         do { try await APIClient.shared.perform("/goals/\(goal.id)", method: "DELETE"); goals.removeAll { $0.id == goal.id } } catch { error = error.localizedDescription }
     }
     private func addFunds() async {
-        guard let goal = fundingGoal, let amount = Double(fundAmount.replacingOccurrences(of: ",", with: ".")), amount > 0 else { return }
+        guard let goal = fundingGoal, goal.status == "active", let amount = Double(fundAmount.replacingOccurrences(of: ",", with: ".")), amount.isFinite, amount > 0, amount <= goal.targetAmount - goal.currentAmount else { error = "Ingresa un aporte válido que no supere el saldo pendiente."; fundingGoal = nil; return }
         isFunding = true; defer { isFunding = false }
         do { let updated: FinanceGoal = try await APIClient.shared.request("/goals/\(goal.id)/contribute", method: "PATCH", body: AmountRequest(amount: amount)); if let index = goals.firstIndex(where: { $0.id == goal.id }) { goals[index] = updated }; fundingGoal = nil }
         catch { error = error.localizedDescription; fundingGoal = nil }
     }
 }
-struct AmountRequest: Encodable { let amount: Double }
-
 struct GoalFormView: View {
     @Environment(\.dismiss) private var dismiss
     let goal: FinanceGoal?
@@ -67,16 +65,16 @@ struct GoalFormView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Objetivo") { TextField("Nombre de la meta", text: $name); TextField("Monto objetivo (COP)", text: $target).keyboardType(.decimalPad); TextField("Monto ahorrado (COP)", text: $current).keyboardType(.decimalPad); DatePicker("Fecha objetivo", selection: $deadline, displayedComponents: .date); TextField("Descripción (opcional)", text: $description, axis: .vertical) }
+                Section("Objetivo") { TextField("Nombre de la meta", text: $name); TextField("Monto objetivo (COP)", text: $target).keyboardType(.decimalPad); if goal == nil { TextField("Ahorro inicial (COP)", text: $current).keyboardType(.decimalPad) } else { LabeledContent("Ahorro acumulado", value: CurrencyFormatter.format(goal?.currentAmount ?? 0)) }; DatePicker("Fecha objetivo", selection: $deadline, displayedComponents: .date); TextField("Descripción (opcional)", text: $description, axis: .vertical) }
                 if let error { Text(error).foregroundStyle(.red) }
                 Button { Task { await save() } } label: { HStack { Spacer(); if isSaving { ProgressView() } else { Text("Guardar meta") }; Spacer() } }.disabled(isSaving)
             }.navigationTitle(goal == nil ? "Nueva meta" : "Editar meta").navigationBarTitleDisplayMode(.inline).toolbar { ToolbarItem(placement: .topBarLeading) { Button("Cancelar") { dismiss() } } }
         }.onAppear { if let goal { name = goal.name; target = String(goal.targetAmount); current = String(goal.currentAmount); deadline = DateFormatters.parse(goal.deadline) ?? .now; description = goal.description ?? "" } }
     }
     private func save() async {
-        guard !name.isEmpty, let targetValue = Double(target.replacingOccurrences(of: ",", with: ".")), targetValue > 0, let currentValue = Double(current.replacingOccurrences(of: ",", with: ".")) else { error = "Revisa el nombre y los montos de la meta."; return }
+        guard name.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2, let targetValue = Double(target.replacingOccurrences(of: ",", with: ".")), targetValue.isFinite, targetValue > 0, let currentValue = Double(current.replacingOccurrences(of: ",", with: ".")), currentValue.isFinite, currentValue >= 0, currentValue <= targetValue, (goal == nil || targetValue >= (goal?.currentAmount ?? 0)) else { error = "Revisa el nombre y los montos de la meta."; return }
         isSaving = true; defer { isSaving = false }
-        let dto = GoalRequest(title: name, targetAmount: targetValue, currentAmount: currentValue, deadline: DateFormatters.isoDay.string(from: deadline), description: description.isEmpty ? nil : description)
+        let dto = GoalRequest(title: name, targetAmount: targetValue, currentAmount: goal == nil ? currentValue : nil, deadline: DateFormatters.isoDay.string(from: deadline), description: description.isEmpty ? nil : description)
         do { if let goal { let _: FinanceGoal = try await APIClient.shared.request("/goals/\(goal.id)", method: "PUT", body: dto) } else { let _: FinanceGoal = try await APIClient.shared.request("/goals", method: "POST", body: dto) }; dismiss() } catch { self.error = error.localizedDescription }
     }
 }
