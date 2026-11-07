@@ -61,3 +61,14 @@ Versión revisada el 7 de noviembre de 2026 contra los controladores del reposit
 - La validación autenticada real (incluida separación entre usuarios) y la rotación de credenciales de producción continúan siendo requisitos.
 - Cuentas/billeteras aún necesitan API backend antes de habilitar su gestión desde iOS.
 - Ningún secret debe aparecer en GitHub, archivos de código o notas de ejecución.
+
+
+## Contratos adicionales: privacidad y Pro (pendientes de API desplegada)
+
+- GET /privacy/policy; GET /privacy/status; POST /privacy/consent; POST /privacy/rights-request.
+- POST /auth/register incluye `privacyAccepted`, `privacyVersion`, `marketingConsent`. La prueba Pro de un mes la calcula el servidor.
+- PUT /auth/profile; POST /auth/profile-email/request y /confirm.
+- GET /billing/catalog, /billing/me, /billing/quote.
+- Rutas administrativas /admin/billing/plans, /promotions y /grants.
+- iOS NO incluye cobros o donaciones habilitadas. Requiere StoreKit 2 y comprobación de compras antes de habilitar pagos.
+- **Beta Estudiante excluida.**
