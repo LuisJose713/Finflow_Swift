@@ -12,6 +12,8 @@ struct TransactionsView: View {
     @State private var error: String?
     @State private var isLoading = true
     @State private var showingCreate = false
+    @State private var editingTransaction: FinanceTransaction?
+    @State private var deletingTransaction: FinanceTransaction?
     @State private var exportURL: URL?
     @State private var showingShare = false
 
@@ -47,7 +49,8 @@ struct TransactionsView: View {
                     else {
                         List {
                             ForEach(filtered) { tx in TransactionRow(transaction: tx).listRowBackground(FinFlowTheme.surface).swipeActions {
-                                Button(role: .destructive) { Task { await delete(tx) } } label: { Label("Eliminar", systemImage: "trash") }
+                                Button("Editar", systemImage: "pencil") { editingTransaction = tx }.tint(FinFlowTheme.accent)
+                                Button(role: .destructive) { deletingTransaction = tx } label: { Label("Eliminar", systemImage: "trash") }
                             } }
                         }.scrollContentBackground(.hidden).listStyle(.plain)
                     }
@@ -61,6 +64,17 @@ struct TransactionsView: View {
             .task { await load() }
             .refreshable { await load() }
             .sheet(isPresented: $showingCreate, onDismiss: { Task { await load() } }) { CreateTransactionView(categories: categories, accounts: accounts) }
+            .sheet(item: $editingTransaction, onDismiss: { Task { await load() } }) { transaction in
+                CreateTransactionView(categories: categories, accounts: accounts, editing: transaction)
+            }
+            .confirmationDialog("¿Eliminar este movimiento?", isPresented: Binding(
+                get: { deletingTransaction != nil }, set: { if !$0 { deletingTransaction = nil } }
+            ), titleVisibility: .visible) {
+                Button("Eliminar definitivamente", role: .destructive) {
+                    if let tx = deletingTransaction { Task { await delete(tx); deletingTransaction = nil } }
+                }
+                Button("Cancelar", role: .cancel) { deletingTransaction = nil }
+            } message: { Text("Esta acción modifica tus datos financieros y no se puede deshacer.") }
             .sheet(isPresented: $showingShare) { if let exportURL { ShareSheet(items: [exportURL]) } }
         }
     }
@@ -124,6 +138,7 @@ struct CreateTransactionView: View {
     @Environment(\.dismiss) private var dismiss
     let categories: [FinanceCategory]
     let accounts: [FinancialAccount]
+    var editing: FinanceTransaction? = nil
     @State private var description = ""
     @State private var amount = ""
     @State private var type = "expense"
@@ -145,12 +160,23 @@ struct CreateTransactionView: View {
                     if !accounts.filter({ !$0.archived }).isEmpty { Picker("Billetera", selection: $accountId) { Text("Sin billetera").tag(0); ForEach(accounts.filter { !$0.archived }) { Text($0.name).tag($0.id) } } }
                 }
                 if let error { Section { Text(error).foregroundStyle(.red) } }
-                Section { Button { Task { await save() } } label: { if isSaving { ProgressView() } else { Text("Guardar movimiento").frame(maxWidth: .infinity) } }.disabled(isSaving) }
+                Section { Button { Task { await save() } } label: { if isSaving { ProgressView() } else { Text(editing == nil ? "Guardar movimiento" : "Guardar cambios").frame(maxWidth: .infinity) } }.disabled(isSaving) }
             }
             .scrollContentBackground(.hidden).background(FinFlowTheme.background)
-            .navigationTitle("Nuevo movimiento").navigationBarTitleDisplayMode(.inline)
+            .navigationTitle(editing == nil ? "Nuevo movimiento" : "Editar movimiento").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarLeading) { Button("Cancelar") { dismiss() } } }
-            .onAppear { if categoryId == 0 { categoryId = suitableCategories.first?.id ?? 0 } }
+            .onAppear {
+                if let editing {
+                    description = editing.description
+                    amount = String(editing.amount)
+                    type = editing.type
+                    categoryId = editing.categoryId
+                    accountId = editing.accountId ?? 0
+                    date = editing.parsedDate
+                } else if categoryId == 0 {
+                    categoryId = suitableCategories.first?.id ?? 0
+                }
+            }
             .onChange(of: type) { _, newType in categoryId = categories.first(where: { $0.type.lowercased() == newType })?.id ?? 0 }
         }
     }
@@ -160,7 +186,9 @@ struct CreateTransactionView: View {
         var dto = CreateTransactionRequest(description: description, amount: value, type: type, categoryId: categoryId, date: DateFormatters.isoDay.string(from: date), notes: nil)
         dto.accountId = accountId == 0 ? nil : accountId
         do {
-            let _: FinanceTransaction = try await APIClient.shared.request("/transactions", method: "POST", body: dto)
+            let path = editing.map { "/transactions/\($0.id)" } ?? "/transactions"
+            let method = editing == nil ? "POST" : "PUT"
+            let _: FinanceTransaction = try await APIClient.shared.request(path, method: method, body: dto)
             dismiss()
         } catch {
             self.error = OfflineTransactionStore.isConnectivityError(error)
