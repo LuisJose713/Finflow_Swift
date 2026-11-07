@@ -54,6 +54,16 @@ struct MoreView: View {
                 List {
                     Section("Organiza tus finanzas") {
                         NavigationLink {
+                            AccountsView()
+                        } label: {
+                            Label("Cuentas y billeteras", systemImage: "wallet.pass")
+                        }
+                        NavigationLink {
+                            RecurringView()
+                        } label: {
+                            Label("Movimientos recurrentes", systemImage: "repeat")
+                        }
+                        NavigationLink {
                             CategoriesView()
                         } label: {
                             Label("Categorías", systemImage: "square.grid.2x2")
