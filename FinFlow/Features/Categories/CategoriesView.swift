@@ -126,7 +126,7 @@ struct CategoriesView: View {
             categories.removeAll { $0.id == category.id }
             deleting = nil
         } catch {
-            error = error.localizedDescription
+            self.error = error.localizedDescription
             deleting = nil
         }
     }
