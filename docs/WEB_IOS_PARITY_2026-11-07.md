@@ -9,7 +9,7 @@ FinFlow iOS es una app **SwiftUI nativa**, no una web embebida. Usa el mismo bac
 |---|---|---|---|
 | Registro / login | AuthView, SessionStore | POST /auth/register, /auth/login; GET /auth/me | Recuperación verificada por servidor, token en Keychain, clave >= 8 |
 | Inicio / estadísticas | DashboardView | /transactions/stats, /transactions | Gráficos nativos Charts |
-| Movimientos | TransactionsView | /transactions; PDF/CSV | Filtros, altas, eliminación, caché por usuario y cola offline |
+| Movimientos | TransactionsView | /transactions; PDF/CSV | Altas y eliminación online, caché cifrada de solo lectura sin conexión; no reintentos que dupliquen dinero |
 | Metas | GoalsView | /goals y /goals/{id}/contribute | Edición no altera el saldo existente; los aportes son validados en cliente **y** servidor |
 | Gastos planificados | PlannedExpensesView | /planned-expenses | Crear, editar, ejecutar, cancelar, eliminar |
 | Categorías | CategoriesView | /categories | Sistema visible en modo lectura; CRUD solo propias; servidor valida propietario |
@@ -17,7 +17,10 @@ FinFlow iOS es una app **SwiftUI nativa**, no una web embebida. Usa el mismo bac
 | Administrador | AdminView | /admin/overview | Menú visible solo con rol ADMIN actualizado por /auth/me. Server exige ROLE_ADMIN |
 | Asesor IA | AdvisorView | /ai/chat | Depende de disponibilidad del servicio de IA |
 | Apariencia / perfil | SettingsView | /auth/me | Soporta modo del sistema, claro y oscuro |
-| Cuentas y billeteras | **No implementado** | Sin contrato público de API en controllers actuales | Requiere endpoints seguros específicos, no inventar datos/saldos |
+| Cuentas y billeteras | AccountsView | /accounts y /accounts/transfers | Saldos reales del servidor, crear, editar, archivar y transferir |
+| Movimientos recurrentes | RecurringView | /recurring y /recurring/process-due | Crear, pausar, activar y ejecutar vencimientos idempotentes |
+| Seguridad de cuenta | SecurityView | /auth/change-password y /auth/revoke-sessions | Cambio de contraseña y cierre global de sesiones |
+| Historial de metas | GoalHistoryView | /goals/{id}/contributions | Listar aportes y actualizar estado |
 | Notificaciones push | **No implementado** | Requiere APNs, permisos y flujo servidor | No simular alertas push |
 | App Store / TestFlight | **Pendiente firma** | Apple Developer / App Store Connect | CI build Simulator sin firmar; IPA exige certificados y provisioning |
 
@@ -25,7 +28,8 @@ FinFlow iOS es una app **SwiftUI nativa**, no una web embebida. Usa el mismo bac
 - No se usa `X-User-Id`: el backend extrae el propietario a partir del JWT validado.
 - No se usa un encabezado configurable para pedir tokens móviles de 30 días.
 - El host de API HTTPS está fijado para impedir envío accidental de bearer a terceros.
-- Keychain guarda tokens, no UserDefaults.
+- Keychain guarda tokens y la llave AES-GCM; UserDefaults solo mantiene caché cifrada.
+- Los pendientes antiguos permanecen cifrados para revisión; no se reenvían POST tras fallos de red ambiguos hasta que el backend tenga un contrato de idempotencia.
 - Recuperación de sesión obliga a validar `GET /auth/me`; rol administrativo nunca se confía a datos locales.
 - No registrar tokens, passwords ni datos financieros sensibles en logs.
 - El backend es responsable de impedir acceso entre usuarios y de validar aportes concurrentes.
@@ -43,4 +47,4 @@ FinFlow iOS es una app **SwiftUI nativa**, no una web embebida. Usa el mismo bac
 Véase: https://github.com/LuisJose713/WS_FINFLOW/issues/22
 
 ## Pull request iOS
-Véase: https://github.com/LuisJose713/Finflow_Swift/pull/1
+Véase: https://github.com/LuisJose713/Finflow_Swift/pull/4
