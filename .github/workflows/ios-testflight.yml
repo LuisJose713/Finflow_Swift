@@ -1,6 +1,9 @@
 name: FinFlow iOS - Device Archive and TestFlight
 
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/ios-testflight.yml'
   workflow_dispatch:
     inputs:
       distribution:
@@ -33,7 +36,7 @@ jobs:
         run: xcodebuild -version
 
       - name: Validate unsigned device archive
-        if: ${{ inputs.distribution == 'unsigned-archive' }}
+        if: ${{ inputs.distribution != 'testflight' }}
         shell: bash
         run: |
           set -euo pipefail
