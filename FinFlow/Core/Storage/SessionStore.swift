@@ -10,11 +10,18 @@ final class SessionStore: ObservableObject {
 
     func restoreSession() async {
         guard let token = TokenStore.shared.read("token"), !token.isEmpty else { return }
-        let email = TokenStore.shared.read("email") ?? ""
-        let name = TokenStore.shared.read("userName") ?? email.components(separatedBy: "@").first ?? "Usuario"
-        let id = Int(TokenStore.shared.read("userId") ?? "0") ?? 0
-        user = AppUser(id: id, email: email, name: name)
-        isAuthenticated = true
+        do {
+            // Restore only after the API confirms JWT validity and current server-side role.
+            let verified: AppUser = try await APIClient.shared.request("/auth/me")
+            user = verified
+            isAuthenticated = true
+        } catch {
+            // Never treat cached identity as an authenticated session.
+            TokenStore.shared.deleteAll()
+            user = nil
+            isAuthenticated = false
+            errorMessage = "Tu sesión caducó. Vuelve a iniciar sesión."
+        }
     }
 
     func login(email: String, password: String) async {
