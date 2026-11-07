@@ -12,14 +12,14 @@ struct DashboardView: View {
         NavigationStack {
             ScreenBackground {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 24) {
                         HStack(alignment: .top) {
-                            VStack(alignment: .leading, spacing: 5) { Text("Hola, \(session.user?.name.components(separatedBy: " ").first ?? "Usuario") 👋").font(.title2.bold()); Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide))).font(.subheadline).foregroundStyle(FinFlowTheme.secondaryText) }
+                            VStack(alignment: .leading, spacing: 5) { VStack(alignment: .leading, spacing: 4) { Text("TU RESUMEN").font(.caption2.weight(.bold)).tracking(1.6).foregroundStyle(FinFlowTheme.accent); Text("Hola, \(session.user?.name.components(separatedBy: " ").first ?? "Usuario")").font(.largeTitle.bold()).lineLimit(1).minimumScaleFactor(0.75) }; Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide))).font(.subheadline).foregroundStyle(FinFlowTheme.secondaryText) }
                             Spacer(); NavigationLink { SettingsView() } label: { Image(systemName: "person.crop.circle.fill").font(.system(size: 30)).foregroundStyle(FinFlowTheme.accent) }
                         }
-                        if let error { ErrorBanner(message: error) }
+                        if let error { VStack(alignment: .leading, spacing: 10) { ErrorBanner(message: error); Button("Reintentar conexión") { Task { await load() } }.buttonStyle(.borderedProminent).tint(FinFlowTheme.accent) }.accessibilityIdentifier("dashboard.error") }
                         SectionCard(title: "Balance total", subtitle: "Resumen de tus finanzas") {
-                            Text(CurrencyFormatter.format(stats.balance)).font(.system(size: 32, weight: .bold, design: .rounded)).foregroundStyle(stats.balance >= 0 ? FinFlowTheme.mint : FinFlowTheme.danger)
+                            Text(CurrencyFormatter.format(stats.balance)).font(.system(size: 36, weight: .bold, design: .rounded)).contentTransition(.numericText()).minimumScaleFactor(0.6).lineLimit(1).accessibilityIdentifier("dashboard.balance").foregroundStyle(stats.balance >= 0 ? FinFlowTheme.mint : FinFlowTheme.danger)
                             HStack(spacing: 12) {
                                 metric("Ingresos", amount: stats.totalIncome, icon: "arrow.down.left", color: FinFlowTheme.mint)
                                 metric("Gastos", amount: stats.totalExpenses, icon: "arrow.up.right", color: FinFlowTheme.danger)
@@ -52,10 +52,10 @@ struct DashboardView: View {
                             ForEach(Array(transactions.prefix(5))) { transaction in TransactionRow(transaction: transaction) }
                             NavigationLink { TransactionsView() } label: { Text("Ver todos los movimientos →").font(.subheadline.weight(.semibold)).foregroundStyle(FinFlowTheme.accent).frame(maxWidth: .infinity, alignment: .trailing) }
                         }
-                    }.padding(18)
+                    }.padding(.horizontal, 20).padding(.vertical, 22)
                 }
                 .refreshable { await load() }
-                .overlay { if isLoading { ProgressView().tint(FinFlowTheme.accent) } }
+                .overlay { if isLoading && transactions.isEmpty { ProgressView("Actualizando finanzas…").tint(FinFlowTheme.accent).padding(20).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16)) } }
             }
             .navigationTitle("FinFlow").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") } } }
