@@ -36,7 +36,7 @@ struct AuthView: View {
             .padding(15).background(FinFlowTheme.elevated, in: RoundedRectangle(cornerRadius: 13))
     }
     private func submit() async {
-        guard email.contains("@"), password.count >= 6 else { session.errorMessage = "Ingresa un correo válido y una contraseña de al menos 6 caracteres."; return }
+        guard email.contains("@"), password.count >= 8 else { session.errorMessage = "Ingresa un correo válido y una contraseña de al menos 8 caracteres."; return }
         if isRegistering {
             guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { session.errorMessage = "Escribe tu nombre."; return }
             guard password == confirmPassword else { session.errorMessage = "Las contraseñas no coinciden."; return }
