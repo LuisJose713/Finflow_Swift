@@ -11,7 +11,7 @@ struct SectionCard<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.headline).foregroundStyle(.white)
+                Text(title).font(.headline).foregroundStyle(.primary)
                 if let subtitle { Text(subtitle).font(.caption).foregroundStyle(FinFlowTheme.secondaryText) }
             }
             content
@@ -37,6 +37,6 @@ struct EmptyState: View {
 }
 struct ErrorBanner: View {
     let message: String
-    var body: some View { Text(message).font(.footnote).foregroundStyle(.white).padding(12).frame(maxWidth: .infinity, alignment: .leading).background(FinFlowTheme.danger.opacity(0.18), in: RoundedRectangle(cornerRadius: 12)) }
+    var body: some View { Text(message).font(.footnote).foregroundStyle(FinFlowTheme.danger).padding(12).frame(maxWidth: .infinity, alignment: .leading).background(FinFlowTheme.danger.opacity(0.18), in: RoundedRectangle(cornerRadius: 12)) }
 }
 struct LoadingView: View { var body: some View { ProgressView("Cargando…").tint(FinFlowTheme.accent).frame(maxWidth: .infinity, maxHeight: .infinity) } }
