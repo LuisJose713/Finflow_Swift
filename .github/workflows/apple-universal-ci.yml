@@ -1,0 +1,71 @@
+name: FinFlow Apple Universal QA
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mac-catalyst:
+    name: Build Mac Catalyst
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile FinFlow for Mac Catalyst
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild -project FinFlow.xcodeproj -scheme FinFlow -configuration Debug \
+            -destination 'generic/platform=macOS,variant=Mac Catalyst' \
+            -derivedDataPath "$RUNNER_TEMP/FinFlowCatalyst" CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee "$RUNNER_TEMP/mac-catalyst-build.log"
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-catalyst-build-log
+          path: ${{ runner.temp }}/mac-catalyst-build.log
+  ipad-simulator:
+    name: Launch on iPad Simulator
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile FinFlow for iPad Simulator
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild -project FinFlow.xcodeproj -scheme FinFlow -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/FinFlowiPad" CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee "$RUNNER_TEMP/ipad-build.log"
+      - name: Launch on an available iPad
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/FinFlowiPad/Build/Products/Debug-iphonesimulator/FinFlow.app"
+          test -d "$APP"
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json,sys
+          data=json.load(sys.stdin)
+          devices=[d for group in data["devices"].values() for d in group if d.get("isAvailable") and d["name"].startswith("iPad")]
+          print(devices[0]["udid"] if devices else "")
+          ')
+          test -n "$UDID" || { echo "::error::No iPad simulator on runner"; exit 1; }
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch "$UDID" com.finflow.ios
+          sleep 6
+          xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/finflow-ipad-launch.png"
+      - name: Attach iPad screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: finflow-ipad-launch
+          path: ${{ runner.temp }}/finflow-ipad-launch.png
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipad-build-log
+          path: ${{ runner.temp }}/ipad-build.log
