@@ -39,7 +39,15 @@ struct RootView: View {
 /// Five clear destinations on iPhone. Secondary features live in "Más";
 /// native SwiftUI navigation adapts naturally to iPad.
 struct MainTabView: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
     var body: some View {
+        #if targetEnvironment(macCatalyst)
+        FinFlowLargeScreenView()
+        #else
+        if sizeClass == .regular { FinFlowLargeScreenView() } else { phoneTabs }
+        #endif
+    }
+    private var phoneTabs: some View {
         TabView {
             DashboardView()
                 .tabItem { Label("Inicio", systemImage: "chart.pie.fill") }
@@ -54,6 +62,93 @@ struct MainTabView: View {
         }
         .toolbarBackground(FinFlowTheme.surface, for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
+    }
+}
+
+
+private enum FinFlowSection: String, Hashable {
+    case dashboard, available, transactions, goals, budgets
+    case accounts, recurring, planned, categories, advisor, billing, settings, admin
+    var label: String {
+        switch self {
+        case .dashboard: "Inicio"
+        case .available: "Mi dinero disponible"
+        case .transactions: "Movimientos"
+        case .goals: "Metas"
+        case .budgets: "Presupuestos"
+        case .accounts: "Cuentas y billeteras"
+        case .recurring: "Recurrentes"
+        case .planned: "Gastos planificados"
+        case .categories: "Categorías"
+        case .advisor: "Asesor IA"
+        case .billing: "Planes"
+        case .settings: "Ajustes y privacidad"
+        case .admin: "Administración"
+        }
+    }
+    var icon: String {
+        switch self {
+        case .dashboard: "chart.pie.fill"
+        case .available: "wallet.bifold.fill"
+        case .transactions: "arrow.left.arrow.right"
+        case .goals: "scope"
+        case .budgets: "chart.bar.xaxis"
+        case .accounts: "wallet.pass"
+        case .recurring: "repeat"
+        case .planned: "calendar.badge.clock"
+        case .categories: "square.grid.2x2"
+        case .advisor: "sparkles"
+        case .billing: "crown"
+        case .settings: "gearshape"
+        case .admin: "lock.shield"
+        }
+    }
+}
+struct FinFlowLargeScreenView: View {
+    @EnvironmentObject private var session: SessionStore
+    @State private var selection: FinFlowSection? = .dashboard
+    var body: some View {
+        NavigationSplitView {
+            List(selection: $selection) {
+                section("TU DINERO", [.dashboard, .available, .transactions, .goals, .budgets])
+                section("ORGANIZA", [.accounts, .recurring, .planned, .categories])
+                section("HERRAMIENTAS", [.advisor, .billing, .settings])
+                if session.user?.isAdmin == true { section("ADMINISTRACIÓN", [.admin]) }
+            }
+            .navigationTitle("FinFlow")
+            .listStyle(.sidebar)
+            .navigationSplitViewColumnWidth(min: 220, ideal: 270, max: 340)
+        } detail: {
+            detail
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+    @ViewBuilder private func section(_ name: String, _ entries: [FinFlowSection]) -> some View {
+        Section(name) {
+            ForEach(entries, id: \.self) { item in
+                Label(item.label, systemImage: item.icon)
+                    .tag(item)
+            }
+        }
+    }
+    @ViewBuilder private var detail: some View {
+        switch selection ?? .dashboard {
+        case .dashboard: DashboardView()
+        case .available: DisponibleView()
+        case .transactions: TransactionsView()
+        case .goals: GoalsView()
+        case .budgets: BudgetsView()
+        case .accounts: AccountsView()
+        case .recurring: RecurringView()
+        case .planned: PlannedExpensesView()
+        case .categories: CategoriesView()
+        case .advisor: AdvisorView()
+        case .billing: BillingView()
+        case .settings: SettingsView()
+        case .admin:
+            if session.user?.isAdmin == true { AdminView() }
+            else { DashboardView() }
+        }
     }
 }
 
