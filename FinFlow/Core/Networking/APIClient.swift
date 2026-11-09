@@ -23,7 +23,7 @@ final class APIClient: @unchecked Sendable {
         session = URLSession(configuration: config)
     }
     // Fixed HTTPS API origin; arbitrary hosts must never receive bearer credentials.
-    let baseURL = "https://finflow-backend-yqhi.onrender.com"
+    let baseURL = "https://finflow-backend-production.up.railway.app"
 
     func request<T: Decodable>(_ path: String, method: String = "GET", body: Encodable? = nil, query: [String: String] = [:], responseType: T.Type = T.self) async throws -> T {
         guard var components = URLComponents(string: baseURL + path) else { throw APIError.invalidURL }
