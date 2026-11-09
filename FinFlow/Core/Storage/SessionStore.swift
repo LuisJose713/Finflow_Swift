@@ -16,11 +16,16 @@ final class SessionStore: ObservableObject {
             user = verified
             isAuthenticated = true
         } catch {
-            // Never treat cached identity as an authenticated session.
-            TokenStore.shared.deleteAll()
+            // Network outages or a temporary backend failure must not erase
+            // a previously valid JWT. Only a confirmed 401 revokes it.
             user = nil
             isAuthenticated = false
-            errorMessage = "Tu sesión caducó. Vuelve a iniciar sesión."
+            if case APIError.unauthorized = error {
+                TokenStore.shared.deleteAll()
+                errorMessage = "Tu sesión caducó. Vuelve a iniciar sesión."
+            } else {
+                errorMessage = "No pudimos comprobar tu sesión. Revisa tu conexión e inténtalo de nuevo."
+            }
         }
     }
 
@@ -32,13 +37,23 @@ final class SessionStore: ObservableObject {
             persist(response)
         } catch { errorMessage = error.localizedDescription }
     }
-    func register(name: String, email: String, password: String) async {
-        isLoading = true; errorMessage = nil
+    func register(name: String, email: String, password: String,
+                  privacyAccepted: Bool? = nil, privacyVersion: String? = nil,
+                  marketingConsent: Bool? = nil) async {
+        isLoading = true
+        errorMessage = nil
         defer { isLoading = false }
         do {
-            let response: AuthResponse = try await APIClient.shared.request("/auth/register", method: "POST", body: RegisterRequest(name: name, email: email, password: password))
+            let body = RegisterRequest(name: name, email: email, password: password,
+                                       privacyAccepted: privacyAccepted,
+                                       privacyVersion: privacyVersion,
+                                       marketingConsent: marketingConsent)
+            let response: AuthResponse = try await APIClient.shared.request(
+                "/auth/register", method: "POST", body: body)
             persist(response)
-        } catch { errorMessage = error.localizedDescription }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
     private func persist(_ response: AuthResponse) {
         TokenStore.shared.save(response.token, account: "token")
