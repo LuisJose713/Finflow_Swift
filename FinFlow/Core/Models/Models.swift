@@ -31,7 +31,100 @@ struct AppUser: Codable, Identifiable {
 
 struct AuthResponse: Decodable { let token: String; let user: AppUser }
 struct LoginRequest: Encodable { let email: String; let password: String }
-struct RegisterRequest: Encodable { let name: String; let email: String; let password: String }
+struct RegisterRequest: Encodable {
+    let name: String
+    let email: String
+    let password: String
+    let privacyAccepted: Bool?
+    let privacyVersion: String?
+    let marketingConsent: Bool?
+
+    init(name: String, email: String, password: String,
+         privacyAccepted: Bool? = nil, privacyVersion: String? = nil,
+         marketingConsent: Bool? = nil) {
+        self.name = name
+        self.email = email
+        self.password = password
+        self.privacyAccepted = privacyAccepted
+        self.privacyVersion = privacyVersion
+        self.marketingConsent = marketingConsent
+    }
+}
+
+// These models mirror the active Railway privacy API. A modal dismissal
+// must never be serialized as consent; only the server can issue a receipt.
+struct PrivacyPolicy: Decodable {
+    let version: String
+    let ready: Bool
+    let effectiveDate: String
+    let controllerName: String
+    let controllerNit: String?
+    let contactEmail: String
+    let contactAddress: String
+    let contactPhone: String
+}
+
+struct PrivacyStatus: Decodable {
+    let accepted: Bool
+    let version: String
+    let policyReady: Bool
+    let marketingConsent: Bool
+    let acceptedAt: String?
+}
+
+struct PrivacyConsentInput: Encodable {
+    let accepted: Bool
+    let policyVersion: String
+    let marketingConsent: Bool
+}
+
+struct PrivacyConsentResponse: Decodable {
+    let accepted: Bool
+    let version: String
+}
+
+struct PrivacyMarketingInput: Encodable { let marketingConsent: Bool }
+struct PrivacyMarketingResponse: Decodable {
+    let marketingConsent: Bool
+    let saved: Bool
+}
+
+struct PrivacyRightsInput: Encodable {
+    let type: String
+    let description: String
+}
+struct PrivacyRightsResponse: Decodable {
+    let id: Int
+    let status: String
+    let message: String
+}
+struct PrivacyRightRecord: Decodable, Identifiable {
+    let id: Int
+    let requestType: String
+    let status: String
+    let createdAt: String?
+    let description: String?
+    enum CodingKeys: String, CodingKey {
+        case id, status, description
+        case requestType = "request_type"
+        case createdAt = "created_at"
+    }
+}
+struct PrivacyReceipt: Decodable { let consents: [PrivacyConsentRecord] }
+struct PrivacyConsentRecord: Decodable, Identifiable {
+    let policyVersion: String
+    let marketingOptIn: Bool
+    let acceptedAt: String
+    let source: String
+    var id: String { policyVersion + ":" + acceptedAt }
+    enum CodingKeys: String, CodingKey {
+        case source
+        case policyVersion = "policy_version"
+        case marketingOptIn = "marketing_opt_in"
+        case acceptedAt = "accepted_at"
+    }
+}
+
 
 /// Mirrors the Transaction entity returned by the Spring Boot API.
 struct FinanceTransaction: Codable, Identifiable {
