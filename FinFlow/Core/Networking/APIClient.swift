@@ -61,7 +61,11 @@ final class APIClient: @unchecked Sendable {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
-            if http.statusCode == 401 { TokenStore.shared.deleteAll(); throw APIError.unauthorized }
+            if http.statusCode == 401 {
+                // A delayed response must never revoke a newer Keychain session.
+                invalidateOnlyTokenUsed(by: request)
+                throw APIError.unauthorized
+            }
             let payload = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
             let message = (payload?["message"] as? String) ?? (payload?["error"] as? String)
             throw APIError.server(message.map { String($0.prefix(280)) } ?? "Error HTTP \(http.statusCode)")
