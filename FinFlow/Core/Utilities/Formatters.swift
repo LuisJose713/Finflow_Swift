@@ -10,9 +10,9 @@ enum CurrencyFormatter {
         formatter.locale = Locale(identifier: "es_CO")
         formatter.numberStyle = .currency
         formatter.currencyCode = "COP"
-        formatter.maximumFractionDigits = 0
-        formatter.minimumFractionDigits = 0
-        return formatter.string(from: NSNumber(value: value)) ?? "$\(Int(value))"
+        formatter.maximumFractionDigits = 2
+        formatter.minimumFractionDigits = 2
+        return formatter.string(from: NSNumber(value: value)) ?? String(format: "$%.2f", value)
     }
     static func compact(_ value: Double) -> String {
         if abs(value) >= 1_000_000 { return String(format: "$%.1f M", value / 1_000_000) }
