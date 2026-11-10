@@ -25,6 +25,18 @@ jobs:
         run: |
           xcodebuild -version
           xcodebuild -list -project FinFlow.xcodeproj
+      - name: Verify premium app icon
+        run: |
+          python3 - <<'PY'
+          import struct
+          from pathlib import Path
+          path = Path("FinFlow/Assets.xcassets/AppIcon.appiconset/FinFlowIcon.png")
+          image = path.read_bytes()
+          assert image[:8] == b"\x89PNG\r\n\x1a\n", "Invalid PNG signature"
+          width, height = struct.unpack(">II", image[16:24])
+          assert (width, height) == (1024, 1024), "App Store icon must be 1024 square"
+          print("Premium app icon valid:", width, height)
+          PY
       - name: Build for iOS Simulator (no signing)
         run: |
           set -o pipefail

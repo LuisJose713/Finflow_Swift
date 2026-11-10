@@ -40,3 +40,61 @@ struct ErrorBanner: View {
     var body: some View { Text(message).font(.footnote).foregroundStyle(FinFlowTheme.danger).padding(12).frame(maxWidth: .infinity, alignment: .leading).background(FinFlowTheme.danger.opacity(0.18), in: RoundedRectangle(cornerRadius: 12)) }
 }
 struct LoadingView: View { var body: some View { ProgressView("Cargando…").tint(FinFlowTheme.accent).frame(maxWidth: .infinity, maxHeight: .infinity) } }
+
+
+/* Premium FinFlow identity. Vector shapes are independent of external fonts. */
+struct FinFlowBrandSymbol: View {
+    var size: CGFloat = 86
+    private let navy = Color(red: 0.035, green: 0.086, blue: 0.165)
+    private let gold = Color(red: 0.84, green: 0.66, blue: 0.30)
+
+    var body: some View {
+        Canvas { context, dimensions in
+            let k = min(dimensions.width, dimensions.height) / 96
+            func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
+            var letter = Path()
+            letter.move(to: point(13, 81))
+            letter.addLine(to: point(29, 40))
+            letter.addCurve(to: point(60, 17), control1: point(36, 22), control2: point(45, 17))
+            letter.addLine(to: point(80, 17))
+            letter.addLine(to: point(75, 29))
+            letter.addLine(to: point(59, 29))
+            letter.addCurve(to: point(39, 42), control1: point(49, 29), control2: point(43, 33))
+            letter.addLine(to: point(24, 81))
+            letter.closeSubpath()
+            context.fill(letter, with: .color(.white))
+            var swoosh = Path()
+            swoosh.move(to: point(25, 68))
+            swoosh.addCurve(to: point(67, 40), control1: point(34, 50), control2: point(48, 40))
+            swoosh.addLine(to: point(78, 40))
+            swoosh.addLine(to: point(71, 52))
+            swoosh.addLine(to: point(60, 52))
+            swoosh.addCurve(to: point(25, 68), control1: point(43, 52), control2: point(33, 60))
+            swoosh.closeSubpath()
+            context.fill(swoosh, with: .color(gold))
+        }
+        .frame(width: size, height: size)
+        .background(navy, in: RoundedRectangle(cornerRadius: size * 0.23))
+        .accessibilityLabel("FinFlow")
+        .accessibilityAddTraits(.isImage)
+    }
+}
+
+struct FinFlowBrandWordmark: View {
+    private let gold = Color(red: 0.84, green: 0.66, blue: 0.30)
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 0) {
+            Text("F").font(.system(size: 34, weight: .bold, design: .rounded))
+            VStack(spacing: 2) {
+                Circle().fill(gold).frame(width: 6, height: 6)
+                RoundedRectangle(cornerRadius: 1).fill(Color.primary).frame(width: 6, height: 24)
+            }
+            .frame(width: 9, height: 34)
+            .accessibilityHidden(true)
+            Text("nFlow").font(.system(size: 34, weight: .bold, design: .rounded))
+        }
+        .foregroundStyle(.primary)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("FinFlow")
+    }
+}

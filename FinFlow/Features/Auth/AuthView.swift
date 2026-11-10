@@ -20,8 +20,8 @@ struct AuthView: View {
             ScrollView {
                 VStack(spacing: 26) {
                     Spacer(minLength: 45)
-                    ZStack { RoundedRectangle(cornerRadius: 24).fill(FinFlowTheme.accent.opacity(0.18)).frame(width: 86, height: 86); Image(systemName: "chart.pie.fill").font(.system(size: 38)).foregroundStyle(FinFlowTheme.accent) }
-                    VStack(spacing: 6) { Text("FinFlow").font(.system(size: 34, weight: .bold, design: .rounded)); Text("Tus finanzas, bajo control").foregroundStyle(FinFlowTheme.secondaryText) }
+                    FinFlowBrandSymbol()
+                    VStack(spacing: 6) { FinFlowBrandWordmark(); Text("Tus finanzas, bajo control").foregroundStyle(FinFlowTheme.secondaryText) }
                     VStack(spacing: 15) {
                         if isRegistering { field("Nombre completo", text: $name, icon: "person") }
                         field("Correo electrónico", text: $email, icon: "envelope", contentType: .emailAddress)
