@@ -79,3 +79,88 @@ enum VaultCrypto {
         return value
     }
 }
+
+
+// MARK: - Experimental ciphertext-only sync (not used by legacy finance views)
+
+/// The server stores only opaque AES-GCM envelopes. None of these requests
+/// sends the recovery key or an unencrypted financial record.
+struct OpaqueVaultEntry: Codable {
+    let id: UUID
+    let revision: Int64
+    let nonce: String
+    let ciphertext: String
+    let updatedAt: String
+}
+
+struct DecryptedVaultEntry<Value> {
+    let id: UUID
+    let revision: Int64
+    let updatedAt: String
+    let value: Value
+}
+
+private struct VaultPutRequest: Encodable {
+    let nonce: String
+    let ciphertext: String
+    let expectedRevision: Int64
+}
+
+enum VaultSyncClient {
+    private static let base = "/private-vault/entries"
+
+    private static func verifyAccount(_ userId: Int64) throws {
+        guard userId > 0,
+              let active = TokenStore.shared.read("userId"),
+              Int64(active) == userId,
+              TokenStore.shared.read("token") != nil
+        else { throw APIError.unauthorized }
+    }
+
+    static func listPage<Value: Decodable>(
+        userId: Int64, recoveryKey: String, after: UUID? = nil,
+        limit: Int = 100, as: Value.Type = Value.self
+    ) async throws -> [DecryptedVaultEntry<Value>] {
+        try verifyAccount(userId)
+        guard (1...250).contains(limit) else { throw VaultCrypto.VaultError.invalidEnvelope }
+        var query = ["limit": String(limit)]
+        if let after { query["after"] = after.uuidString.lowercased() }
+        let rows: [OpaqueVaultEntry] = try await APIClient.shared.request(base, query: query)
+        try verifyAccount(userId)
+        let values = try rows.map { row -> DecryptedVaultEntry<Value> in
+            let clear = try VaultCrypto.open(
+                .init(nonce: row.nonce, ciphertext: row.ciphertext),
+                recoveryKey: recoveryKey, userId: userId, entryId: row.id)
+            let value = try JSONDecoder().decode(Value.self, from: clear)
+            return .init(id: row.id, revision: row.revision, updatedAt: row.updatedAt, value: value)
+        }
+        try verifyAccount(userId)
+        return values
+    }
+
+    static func save<Value: Encodable>(
+        _ value: Value, entryId: UUID, userId: Int64,
+        recoveryKey: String, expectedRevision: Int64 = 0
+    ) async throws -> OpaqueVaultEntry {
+        try verifyAccount(userId)
+        guard expectedRevision >= 0 else { throw VaultCrypto.VaultError.invalidEnvelope }
+        let clear = try JSONEncoder().encode(value)
+        let encrypted = try VaultCrypto.seal(
+            clear, recoveryKey: recoveryKey, userId: userId, entryId: entryId)
+        try verifyAccount(userId)
+        return try await APIClient.shared.request(
+            base + "/" + entryId.uuidString.lowercased(),
+            method: "PUT",
+            body: VaultPutRequest(nonce: encrypted.nonce,
+                                  ciphertext: encrypted.ciphertext,
+                                  expectedRevision: expectedRevision))
+    }
+
+    static func remove(entryId: UUID, userId: Int64, expectedRevision: Int64) async throws {
+        try verifyAccount(userId)
+        guard expectedRevision > 0 else { throw VaultCrypto.VaultError.invalidEnvelope }
+        let path = base + "/" + entryId.uuidString.lowercased() +
+                   "?expectedRevision=" + String(expectedRevision)
+        try await APIClient.shared.perform(path, method: "DELETE")
+    }
+}
