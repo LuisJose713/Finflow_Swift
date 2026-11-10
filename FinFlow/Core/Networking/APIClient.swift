@@ -18,7 +18,9 @@ final class APIClient: @unchecked Sendable {
     private let session: URLSession
     private init() {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 35
+        config.timeoutIntervalForRequest = 20
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.urlCache = nil
         config.timeoutIntervalForResource = 60
         session = URLSession(configuration: config)
     }
@@ -37,10 +39,13 @@ final class APIClient: @unchecked Sendable {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
-            if http.statusCode == 401 { TokenStore.shared.deleteAll(); throw APIError.unauthorized }
+            if http.statusCode == 401 {
+                invalidateOnlyTokenUsed(by: request)
+                throw APIError.unauthorized
+            }
             let serverMessage = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-            let message = (serverMessage?["message"] as? String) ?? (serverMessage?["error"] as? String) ?? String(data: data, encoding: .utf8) ?? "Error HTTP \(http.statusCode)"
-            throw APIError.server(message)
+            let message = (serverMessage?["message"] as? String) ?? (serverMessage?["error"] as? String)
+            throw APIError.server(message.map { String($0.prefix(280)) } ?? "Error HTTP \(http.statusCode)")
         }
         do { return try JSONDecoder().decode(T.self, from: data) }
         catch { throw APIError.server("La respuesta de \(path) no coincide con el modelo esperado: \(error.localizedDescription)") }
@@ -58,14 +63,27 @@ final class APIClient: @unchecked Sendable {
         guard (200..<300).contains(http.statusCode) else {
             if http.statusCode == 401 { TokenStore.shared.deleteAll(); throw APIError.unauthorized }
             let payload = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-            throw APIError.server((payload?["message"] as? String) ?? "Error HTTP \(http.statusCode)")
+            let message = (payload?["message"] as? String) ?? (payload?["error"] as? String)
+            throw APIError.server(message.map { String($0.prefix(280)) } ?? "Error HTTP \(http.statusCode)")
         }
+    }
+
+    /// Only the exact token that received a 401 may be removed. A response
+    /// from an older request must never terminate a newer login on this device.
+    private func invalidateOnlyTokenUsed(by request: URLRequest) {
+        guard let header = request.value(forHTTPHeaderField: "Authorization"),
+              header.hasPrefix("Bearer ") else { return }
+        let sentToken = String(header.dropFirst("Bearer ".count))
+        TokenStore.shared.deleteSession(ifTokenMatches: sentToken)
     }
 
     /// The backend resolves ownership exclusively from the verified bearer JWT.
     private func applyHeaders(to request: inout URLRequest, hasJSONBody: Bool) {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if hasJSONBody { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
+        // Public login/registration must not carry a stale bearer token.
+        // A previous authenticated session must not be revoked by a failed login.
+        guard request.url?.path != "/auth/login", request.url?.path != "/auth/register" else { return }
         if let token = TokenStore.shared.read("token"), !token.isEmpty {
             request.setValue("Bearer \(token.trimmingCharacters(in: .whitespacesAndNewlines))", forHTTPHeaderField: "Authorization")
         }
@@ -78,7 +96,12 @@ final class APIClient: @unchecked Sendable {
         var request = URLRequest(url: url)
         applyHeaders(to: &request, hasJSONBody: false)
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw APIError.server("No fue posible exportar el archivo.") }
+        guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+        if http.statusCode == 401 {
+            invalidateOnlyTokenUsed(by: request)
+            throw APIError.unauthorized
+        }
+        guard (200..<300).contains(http.statusCode) else { throw APIError.server("No fue posible exportar el archivo.") }
         return data
     }
 }
