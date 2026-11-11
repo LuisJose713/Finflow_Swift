@@ -139,6 +139,8 @@ struct CreateTransactionView: View {
     let categories: [FinanceCategory]
     let accounts: [FinancialAccount]
     var editing: FinanceTransaction? = nil
+    var initialType = "expense"
+    var accountNotice: String? = nil
     @State private var description = ""
     @State private var amount = ""
     @State private var type = "expense"
@@ -151,6 +153,9 @@ struct CreateTransactionView: View {
     var body: some View {
         NavigationStack {
             Form {
+                if let accountNotice {
+                    Section { Text(accountNotice).font(.footnote).foregroundStyle(.secondary) }
+                }
                 Section("Movimiento") {
                     Picker("Tipo", selection: $type) { Text("Gasto").tag("expense"); Text("Ingreso").tag("income") }.pickerStyle(.segmented)
                     TextField("Descripción", text: $description)
@@ -164,7 +169,8 @@ struct CreateTransactionView: View {
             }
             .scrollContentBackground(.hidden).background(FinFlowTheme.background)
             .navigationTitle(editing == nil ? "Nuevo movimiento" : "Editar movimiento").navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarLeading) { Button("Cancelar") { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .topBarLeading) { Button("Cancelar") { dismiss() }.disabled(isSaving) } }
+            .interactiveDismissDisabled(isSaving)
             .onAppear {
                 if let editing {
                     description = editing.description
@@ -174,6 +180,7 @@ struct CreateTransactionView: View {
                     accountId = editing.accountId ?? 0
                     date = editing.parsedDate
                 } else if categoryId == 0 {
+                    type = initialType == "income" ? "income" : "expense"
                     categoryId = suitableCategories.first?.id ?? 0
                 }
             }
