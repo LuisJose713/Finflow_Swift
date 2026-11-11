@@ -16,6 +16,9 @@ struct TransactionsView: View {
     @State private var deletingTransaction: FinanceTransaction?
     @State private var exportURL: URL?
     @State private var showingShare = false
+    @State private var isExporting = false
+    @State private var isVisible = false
+    @State private var exportOperation = UUID()
 
     private var filtered: [FinanceTransaction] {
         transactions.filter { tx in
@@ -44,6 +47,7 @@ struct TransactionsView: View {
                         }
                     }.padding(.horizontal, 16)
                     if let error { ErrorBanner(message: error).padding(.horizontal, 16) }
+                    if isExporting { ProgressView("Preparando archivo…") }
                     if isLoading { LoadingView() }
                     else if filtered.isEmpty { EmptyState(icon: "arrow.left.arrow.right", title: "Sin movimientos", message: "Prueba otros filtros o agrega tu primera transacción.") }
                     else {
@@ -58,7 +62,7 @@ struct TransactionsView: View {
             }
             .navigationTitle("Movimientos")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { Menu { Button("Exportar PDF", systemImage: "doc.richtext") { Task { await export("pdf") } }; Button("Exportar CSV", systemImage: "tablecells") { Task { await export("csv") } } } label: { Image(systemName: "square.and.arrow.up") } }
+                ToolbarItem(placement: .topBarLeading) { Menu { Button("Exportar PDF", systemImage: "doc.richtext") { Task { await export("pdf") } }; Button("Exportar CSV", systemImage: "tablecells") { Task { await export("csv") } } } label: { Image(systemName: "square.and.arrow.up") }.disabled(isExporting || showingShare) }
                 ToolbarItem(placement: .topBarTrailing) { Button { showingCreate = true } label: { Image(systemName: "plus.circle.fill") } }
             }
             .task { await load() }
@@ -75,7 +79,16 @@ struct TransactionsView: View {
                 }
                 Button("Cancelar", role: .cancel) { deletingTransaction = nil }
             } message: { Text("Esta acción modifica tus datos financieros y no se puede deshacer.") }
-            .sheet(isPresented: $showingShare) { if let exportURL { ShareSheet(items: [exportURL]) } }
+            .sheet(isPresented: $showingShare, onDismiss: removeTemporaryExport) {
+                if let exportURL { ShareSheet(items: [exportURL]) }
+            }
+            .onAppear { isVisible = true }
+            .onDisappear {
+                isVisible = false
+                exportOperation = UUID()
+                isExporting = false
+                if !showingShare { removeTemporaryExport() }
+            }
         }
     }
     private var yearOptions: [Int] { Array(Set(transactions.map { Calendar.current.component(.year, from: $0.parsedDate) })).sorted(by: >) }
@@ -118,7 +131,19 @@ struct TransactionsView: View {
             self.error = "No se confirmó la eliminación. Comprueba tu conexión y vuelve a cargar los movimientos."
         }
     }
-    private func export(_ kind: String) async {
+    private func removeTemporaryExport() {
+        guard let exportURL else { return }
+        try? FileManager.default.removeItem(at: exportURL)
+        self.exportURL = nil
+    }
+
+    @MainActor private func export(_ kind: String) async {
+        guard isVisible, !isExporting, !showingShare,
+              let token = TokenStore.shared.read("token"), !token.isEmpty else { return }
+        let operation = UUID()
+        exportOperation = operation
+        isExporting = true
+        defer { if exportOperation == operation { isExporting = false } }
         do {
             var query: [String: String] = [:]
             if typeFilter != "all" { query["type"] = typeFilter }
@@ -127,9 +152,21 @@ struct TransactionsView: View {
             if selectedCategory != 0 { query["categoryId"] = String(selectedCategory) }
             if !search.isEmpty { query["search"] = search }
             let data = try await APIClient.shared.download("/transactions/export/\(kind)", query: query)
-            let url = FileManager.default.temporaryDirectory.appendingPathComponent("transacciones_finflow.\(kind)")
-            try data.write(to: url); exportURL = url; showingShare = true
-        } catch { self.error = error.localizedDescription }
+            // A download started before navigation or logout must not persist
+            // the previous session's financial report after it completes.
+            guard isVisible, exportOperation == operation,
+                  TokenStore.shared.read("token") == token else { return }
+            removeTemporaryExport()
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("transacciones_finflow_\(UUID().uuidString).\(kind)")
+            try data.write(to: url, options: [.atomic, .completeFileProtection])
+            exportURL = url
+            showingShare = true
+        } catch {
+            guard isVisible, exportOperation == operation,
+                  TokenStore.shared.read("token") == token else { return }
+            self.error = error.localizedDescription
+        }
     }
 }
 struct EmptyResponse: Decodable {}
