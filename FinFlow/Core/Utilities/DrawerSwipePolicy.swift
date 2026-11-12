@@ -3,7 +3,7 @@ import Foundation
 /// Shared rules for the native pan recognizer, independent of SwiftUI rendering.
 enum DrawerSwipePolicy {
     static func canStart(x: CGFloat, viewportWidth: CGFloat, isOpen: Bool) -> Bool {
-        isOpen || (x >= 24 && x <= min(112, viewportWidth * 0.32))
+        isOpen || (x >= 24 && x <= viewportWidth)
     }
 
     static func isHorizontal(_ translation: CGSize, isOpen: Bool) -> Bool {
