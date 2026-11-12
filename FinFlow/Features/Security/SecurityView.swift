@@ -8,6 +8,10 @@ struct SecurityView: View {
     @State private var newPassword = ""
     @State private var confirmPassword = ""
     @State private var revokePassword = ""
+    @State private var deletePassword = ""
+    @State private var deletePhrase = ""
+    @State private var deleting = false
+    @State private var showConfirmDeletion = false
     @State private var changing = false
     @State private var revoking = false
     @State private var showConfirmRevocation = false
@@ -49,6 +53,25 @@ struct SecurityView: View {
                     Text("Esta acción te desconectará también de este iPhone. Para volver a entrar deberás iniciar sesión.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
+                Section("Eliminar mi cuenta") {
+                    Text("Borraremos tu perfil, movimientos, billeteras, presupuestos y metas, y cerraremos todas tus sesiones. Esta acción no se puede deshacer.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    SecureField("Contraseña actual", text: $deletePassword)
+                        .textContentType(.password)
+                        .accessibilityIdentifier("security.deletePassword")
+                    TextField("Escribe ELIMINAR", text: $deletePhrase)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                        .accessibilityIdentifier("security.deleteConfirmation")
+                    Button("Eliminar mi cuenta definitivamente", role: .destructive) {
+                        showConfirmDeletion = true
+                    }
+                    .disabled(changing || revoking || deleting || deletePassword.isEmpty ||
+                              deletePhrase != "ELIMINAR" ||
+                              deletePassword.utf8.count > 72)
+                    Text("Tu contraseña se verifica en el servidor antes de eliminar los datos.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
                 if let error { Section { ErrorBanner(message: error) } }
                 if let information {
                     Section {
@@ -68,6 +91,34 @@ struct SecurityView: View {
             Button("Cancelar", role: .cancel) {}
         } message: {
             Text("También se invalidará el acceso desde la web.")
+        }
+        .confirmationDialog("¿Eliminar tu cuenta definitivamente?",
+                            isPresented: $showConfirmDeletion,
+                            titleVisibility: .visible) {
+            Button("Sí, eliminar cuenta", role: .destructive) {
+                Task { await deleteAccount() }
+            }
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text("Se eliminarán permanentemente tus datos financieros de FinFlow y se cerrarán tus sesiones.")
+        }
+    }
+
+    private func deleteAccount() async {
+        guard !deletePassword.isEmpty, deletePassword.utf8.count <= 72,
+              deletePhrase == "ELIMINAR", !deleting else { return }
+        deleting = true
+        defer { deleting = false }
+        error = nil
+        do {
+            try await APIClient.shared.perform(
+                "/auth/account", method: "DELETE",
+                body: PasswordConfirmation(password: deletePassword))
+            deletePassword = ""
+            deletePhrase = ""
+            session.logout()
+        } catch {
+            self.error = "No pudimos confirmar la eliminación. Comprueba tu cuenta antes de reintentar."
         }
     }
 

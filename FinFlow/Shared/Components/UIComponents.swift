@@ -9,15 +9,15 @@ struct SectionCard<Content: View>: View {
     var subtitle: String? = nil
     @ViewBuilder var content: Content
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(.headline).foregroundStyle(.primary)
                 if let subtitle { Text(subtitle).font(.caption).foregroundStyle(FinFlowTheme.secondaryText) }
             }
             content
         }
         .padding(16).frame(maxWidth: .infinity, alignment: .leading)
-        .background(FinFlowTheme.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(FinFlowTheme.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 struct PrimaryButton: View {
@@ -116,10 +116,13 @@ struct PresentationCard: View {
                 Button {
                     Task { await preferences.setHidden(false, cardID: cardID) }
                 } label: {
-                    Label("Mostrar presentación", systemImage: "rectangle.expand.vertical")
-                        .font(.footnote.weight(.medium)).frame(minHeight: 44)
+                    Image(systemName: "rectangle.expand.vertical")
+                        .font(.system(size: 17, weight: .medium))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .trailing)
                 .accessibilityLabel("Mostrar presentación de " + eyebrow)
             } else {
                 VStack(alignment: .leading, spacing: 10) {

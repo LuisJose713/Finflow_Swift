@@ -5,6 +5,7 @@ struct DashboardView: View {
     @EnvironmentObject private var session: SessionStore
     @State private var stats = TransactionStats()
     @State private var transactions: [FinanceTransaction] = []
+    @State private var recentCount = 5
     @State private var isLoading = true
     @State private var lastUpdated: Date?
     @State private var requestInFlight = false
@@ -239,17 +240,41 @@ struct DashboardView: View {
     }
 
     private var recentMovements: some View {
-        SectionCard(title: "Últimos movimientos", subtitle: "Ordenados del más reciente al más antiguo") {
-            if transactions.isEmpty {
+        SectionCard(title: "Movimientos recientes") {
+            if !recentTransactions.isEmpty {
+                HStack(spacing: 6) {
+                    Text("Mostrar").font(.caption)
+                        .foregroundStyle(FinFlowTheme.secondaryText)
+                    Spacer(minLength: 0)
+                    ForEach([2, 3, 5], id: \.self) { count in
+                        Button { recentCount = count } label: {
+                            Text(String(count))
+                                .font(.subheadline.weight(.semibold))
+                                .monospacedDigit()
+                                .foregroundStyle(recentCount == count ? FinFlowTheme.gold : Color.primary)
+                                .frame(minWidth: 44, minHeight: 44)
+                                .background(recentCount == count
+                                    ? FinFlowTheme.gold.opacity(0.14) : FinFlowTheme.elevated,
+                                    in: RoundedRectangle(cornerRadius: 11))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Mostrar los últimos \(count) movimientos")
+                    }
+                }
+                .accessibilityIdentifier("dashboard.recentCount")
+                Divider()
+            }
+            if recentTransactions.isEmpty {
                 EmptyState(icon: "tray", title: "Tu plan empieza con un movimiento",
                            message: "Registra tu primer ingreso o gasto con los botones de arriba.")
             }
-            ForEach(recentTransactions) { transaction in
+            ForEach(Array(recentTransactions.prefix(recentCount))) { transaction in
                 TransactionRow(transaction: transaction, hideAmount: hideAmounts)
             }
             NavigationLink { TransactionsView() } label: {
                 Label("Ver todos los movimientos", systemImage: "arrow.right")
-                    .font(.subheadline.weight(.semibold)).foregroundStyle(FinFlowTheme.accent)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(FinFlowTheme.accent)
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .trailing)
             }
         }
