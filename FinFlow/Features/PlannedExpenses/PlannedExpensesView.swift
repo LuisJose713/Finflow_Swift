@@ -17,7 +17,6 @@ struct PlannedExpensesView: View {
     private var overdue: [PlannedExpense] { expenses.filter { $0.status == "pending" && ($0.parsedDueDate ?? .distantFuture) < Calendar.current.startOfDay(for: .now) } }
 
     var body: some View {
-        NavigationStack {
             ScreenBackground {
                 ScrollView {
                     VStack(spacing: 16) {
@@ -55,7 +54,6 @@ struct PlannedExpensesView: View {
                 Button("Cancelar", role: .cancel) { executeTarget = nil }
             }
             .overlay { if isWorking { ProgressView().padding(18).background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14)) } }
-        }
     }
 
     private func totalCard(_ title: String, value: Double, color: Color) -> some View {

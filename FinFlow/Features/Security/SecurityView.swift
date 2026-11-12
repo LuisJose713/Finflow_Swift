@@ -18,11 +18,8 @@ struct SecurityView: View {
         ScreenBackground {
             Form {
                 Section {
-                    Label("Tu sesión se valida contra el servidor.", systemImage: "lock.shield")
-                        .font(.subheadline)
-                    Text("Al cambiar tu contraseña o cerrar las sesiones, los tokens antiguos dejan de funcionar en todos tus dispositivos.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
+                    PresentationCard(cardID: "security.intro", eyebrow: "Protección de cuenta", title: "Tu información, bajo tu control.", detail: "Gestiona tu contraseña y las sesiones activas de tu cuenta.", symbol: "lock.shield")
+                }.listRowBackground(Color.clear).listRowInsets(EdgeInsets())
                 Section("Cambiar contraseña") {
                     SecureField("Contraseña actual", text: $currentPassword)
                         .textContentType(.password)

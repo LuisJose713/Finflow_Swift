@@ -18,7 +18,6 @@ struct BudgetsView: View {
     private var years: [Int] { Array((year - 2)...(year + 2)) }
 
     var body: some View {
-        NavigationStack {
             ScreenBackground {
                 ScrollView {
                     LazyVStack(spacing: 16) {
@@ -111,7 +110,6 @@ struct BudgetsView: View {
             } message: {
                 Text("Eliminar el presupuesto no elimina tus movimientos.")
             }
-        }
     }
 
     private func budgetCard(_ budget: BudgetOverview) -> some View {

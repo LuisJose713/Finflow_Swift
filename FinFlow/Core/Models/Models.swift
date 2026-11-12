@@ -178,7 +178,7 @@ struct CreateTransactionRequest: Codable {
     let notes: String?
     var accountId: Int? = nil
     let currency: String = "COP"
-    let status: String = "completed"
+    var status: String = "completed"
 }
 
 struct TransactionStats: Decodable {
@@ -424,3 +424,68 @@ struct SecurityActionResponse: Decodable {
 struct ChatMessage: Identifiable, Codable { var id = UUID(); var content: String; var role: String; var timestamp = Date() }
 struct AdvisorRequest: Encodable { let mensaje: String }
 struct AdvisorResponse: Decodable { let respuesta: String }
+
+
+struct BillingPlan: Codable, Identifiable {
+    var code: String
+    var title: String
+    var description: String
+    var priceCop: Int
+    var active: Bool
+    var sortOrder: Int
+    var id: String { code }
+}
+struct BillingPromotion: Codable, Identifiable {
+    let code: String
+    let title: String
+    let planCode: String
+    let discountType: String
+    let discountValue: Int
+    let startsAt: String
+    let endsAt: String
+    let maxRedemptions: Int?
+    let redemptionCount: Int
+    let active: Bool
+    let published: Bool
+    var id: String { code }
+}
+struct BillingOffer: Decodable, Identifiable {
+    let code: String
+    let title: String
+    let description: String
+    let originalCop: Int
+    let priceCop: Int
+    let promoCode: String?
+    let promoTitle: String?
+    let savingsPercent: Int
+    let checkoutEnabled: Bool
+    var id: String { code }
+}
+struct BillingCatalog: Decodable {
+    let currency: String
+    let checkoutEnabled: Bool
+    let offers: [BillingOffer]
+}
+struct BillingEntitlement: Decodable {
+    let planCode: String
+    let pro: Bool
+    let validUntil: String?
+    let source: String?
+}
+struct BillingPromotionInput: Encodable {
+    let code: String
+    let title: String
+    let planCode: String
+    let discountType: String
+    let discountValue: Int
+    let startsAt: String
+    let endsAt: String
+    let maxRedemptions: Int?
+    let active: Bool
+    let published: Bool
+}
+struct BillingGrantInput: Encodable {
+    let userId: Int
+    let planCode: String
+    let reason: String
+}

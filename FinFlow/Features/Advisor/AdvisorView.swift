@@ -9,7 +9,6 @@ struct AdvisorView: View {
     private let suggestions = ["¿Cómo puedo ahorrar más?", "Analiza mis gastos", "Ayúdame a crear un presupuesto"]
 
     var body: some View {
-        NavigationStack {
             ScreenBackground {
                 VStack(spacing: 0) {
                     ScrollViewReader { proxy in
@@ -37,7 +36,6 @@ struct AdvisorView: View {
             }
             .navigationTitle("Asesor IA")
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Limpiar") { messages.removeAll(); error = nil } } }
-        }
     }
     private func messageBubble(_ message: ChatMessage) -> some View {
         HStack { if message.role != "user" { Spacer(minLength: 35) }

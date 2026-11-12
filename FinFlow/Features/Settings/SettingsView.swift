@@ -5,7 +5,6 @@ struct SettingsView: View {
     @State private var showingLogout = false
     @AppStorage("finflow.appearance") private var appearance = "system"
     var body: some View {
-        NavigationStack {
             ScreenBackground {
                 Form {
                     Section("Cuenta") {
@@ -33,20 +32,14 @@ struct SettingsView: View {
                         }
                         .pickerStyle(.segmented)
                     }
-                    Section("Conexión segura") {
-                        Label("Servidor oficial de FinFlow", systemImage: "lock.shield")
-                        Text(APIClient.shared.baseURL).font(.caption).foregroundStyle(.secondary)
-                        Text("Por seguridad, la app no envía tus credenciales a servidores personalizados.").font(.caption).foregroundStyle(.secondary)
-                    }
                     Section("Acerca de") {
                         LabeledContent("Aplicación", value: "FinFlow iOS")
-                        LabeledContent("Versión", value: "1.0.0")
+                        LabeledContent("Versión", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0")
                     }
                 }.scrollContentBackground(.hidden)
             }
             .navigationTitle("Ajustes")
             .confirmationDialog("¿Cerrar sesión?", isPresented: $showingLogout, titleVisibility: .visible) { Button("Cerrar sesión", role: .destructive) { session.logout() }; Button("Cancelar", role: .cancel) {} } message: { Text("Se eliminará la sesión guardada de este dispositivo.") }
-        }
     }
 }
 
@@ -208,5 +201,165 @@ struct PrivacyRightsCenterView: View {
         } catch {
             errorText = "No se pudo registrar la solicitud: \(error.localizedDescription)"
         }
+    }
+}
+
+
+struct PlansView: View {
+    @State private var catalog: BillingCatalog?
+    @State private var entitlement: BillingEntitlement?
+    @State private var selection = ""
+    @State private var coupon = ""
+    @State private var quote: BillingOffer?
+    @State private var error: String?
+    @State private var loading = false
+
+    var body: some View {
+        ScreenBackground {
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    if loading { ProgressView("Consultando planes…") }
+                    if let error { ErrorBanner(message: error) }
+                    if let entitlement {
+                        SectionCard(title: "Tu plan actual", subtitle: entitlement.pro ? "Beneficios Pro activos" : "Plan gratuito") {
+                            Text(entitlement.planCode).font(.title2.bold())
+                            if let until = entitlement.validUntil {
+                                Text("Vigente hasta: " + String(until.prefix(10))).font(.footnote).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    ForEach(catalog?.offers ?? []) { offer in
+                        SectionCard(title: offer.title, subtitle: offer.description) {
+                            Text(CurrencyFormatter.format(Double(offer.priceCop)))
+                                .font(.title.weight(.bold)).monospacedDigit().minimumScaleFactor(0.6)
+                            if offer.savingsPercent > 0 {
+                                Label("Ahorra \(offer.savingsPercent)%", systemImage: "tag")
+                                    .font(.footnote.weight(.medium)).foregroundStyle(FinFlowTheme.accent)
+                            }
+                            if let promotion = offer.promoTitle { Text(promotion).font(.footnote) }
+                            Button("Consultar este plan") { selection = offer.code; quote = nil; coupon = "" }
+                                .buttonStyle(.bordered).disabled(loading)
+                        }
+                    }
+                    if !selection.isEmpty {
+                        SectionCard(title: "Consultar oferta") {
+                            TextField("Código promocional (opcional)", text: $coupon)
+                                .textInputAutocapitalization(.characters).autocorrectionDisabled()
+                                .textFieldStyle(.roundedBorder)
+                                .onChange(of: coupon) { _, value in coupon = String(value.prefix(32)) }
+                            Button("Consultar precio") { Task { await consult() } }.disabled(loading)
+                            if let quote {
+                                LabeledContent("Precio cotizado", value: CurrencyFormatter.format(Double(quote.priceCop)))
+                                if let title = quote.promoTitle { Text(title).font(.footnote) }
+                            }
+                        }
+                    }
+                    Text("Los planes y promociones son informativos. El pago y la activación de suscripciones todavía no están disponibles.")
+                        .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: 760).padding(16).frame(maxWidth: .infinity)
+            }
+            .refreshable { await load() }
+        }
+        .navigationTitle("Planes FinFlow")
+        .task { await load() }
+    }
+
+    @MainActor private func load() async {
+        guard !loading else { return }
+        loading = true; error = nil
+        defer { loading = false }
+        do { catalog = try await APIClient.shared.request("/billing/catalog") }
+        catch { self.error = error.localizedDescription }
+        do { entitlement = try await APIClient.shared.request("/billing/me") }
+        catch { self.error = error.localizedDescription }
+    }
+    @MainActor private func consult() async {
+        guard !loading else { return }
+        loading = true; error = nil; quote = nil
+        defer { loading = false }
+        do {
+            quote = try await APIClient.shared.request("/billing/quote", query: ["planCode": selection, "promoCode": coupon.trimmingCharacters(in: .whitespacesAndNewlines)])
+        } catch { self.error = error.localizedDescription }
+    }
+}
+
+struct ReportsView: View {
+    @EnvironmentObject private var session: SessionStore
+    @State private var type = ""
+    @State private var month = 0
+    @State private var year = 0
+    @State private var search = ""
+    @State private var working = false
+    @State private var error: String?
+    @State private var reportURL: URL?
+    @State private var sharing = false
+    @State private var operation = UUID()
+    @State private var visible = false
+
+    var body: some View {
+        ScreenBackground {
+            Form {
+                Section("Filtros del informe") {
+                    Picker("Movimientos", selection: $type) {
+                        Text("Todos").tag("")
+                        Text("Ingresos").tag("income")
+                        Text("Gastos").tag("expense")
+                    }
+                    Picker("Mes", selection: $month) {
+                        Text("Todos los meses").tag(0)
+                        ForEach(1...12, id: \.self) { value in Text(Calendar.current.monthSymbols[value - 1]).tag(value) }
+                    }
+                    Picker("Año", selection: $year) {
+                        Text("Todos los años").tag(0)
+                        ForEach(Array((2000...max(2100, Calendar.current.component(.year, from: .now))).reversed()), id: \.self) { Text(String($0)).tag($0) }
+                    }
+                    TextField("Buscar por título", text: $search)
+                        .onChange(of: search) { _, value in search = String(value.prefix(120)) }
+                }
+                Section {
+                    Button { Task { await export("pdf") } } label: { Label("Compartir PDF", systemImage: "doc.richtext") }
+                    Button { Task { await export("xlsx") } } label: { Label("Compartir Excel", systemImage: "tablecells") }
+                    if working { ProgressView("Preparando informe…") }
+                } footer: {
+                    Text("Los informes usan los mismos datos y plantillas de FinFlow Web. El Excel es editable.")
+                }
+                .disabled(working || sharing)
+                if let error { Section { ErrorBanner(message: error) } }
+            }
+            .scrollContentBackground(.hidden)
+        }
+        .navigationTitle("Reportes")
+        .onAppear { visible = true }
+        .onDisappear { visible = false; operation = UUID(); working = false; if !sharing { cleanup() } }
+        .sheet(isPresented: $sharing, onDismiss: cleanup) {
+            if let reportURL { ShareSheet(items: [reportURL]) }
+        }
+    }
+
+    @MainActor private func export(_ kind: String) async {
+        guard visible, !working, let owner = session.user?.id else { return }
+        let current = UUID(); operation = current; working = true; error = nil
+        defer { if operation == current { working = false } }
+        var query: [String: String] = [:]
+        if !type.isEmpty { query["type"] = type }
+        if month > 0 { query["month"] = String(month) }
+        if year > 0 { query["year"] = String(year) }
+        if !search.isEmpty { query["search"] = search }
+        do {
+            let data = try await APIClient.shared.download("/transactions/export/" + kind, query: query)
+            guard visible, operation == current, session.user?.id == owner else { return }
+            cleanup()
+            let file = FileManager.default.temporaryDirectory.appendingPathComponent("FinFlow_Movimientos_\(UUID().uuidString).\(kind)")
+            try data.write(to: file, options: [.atomic, .completeFileProtection])
+            reportURL = file; sharing = true
+        } catch {
+            guard visible, operation == current, session.user?.id == owner else { return }
+            self.error = error.localizedDescription
+        }
+    }
+    private func cleanup() {
+        if let reportURL { try? FileManager.default.removeItem(at: reportURL) }
+        reportURL = nil
     }
 }

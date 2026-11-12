@@ -41,6 +41,10 @@ jobs:
         run: |
           swiftc -parse-as-library FinFlow/Core/Utilities/Formatters.swift scripts/COPInputChecks.swift -o "$RUNNER_TEMP/cop-checks"
           "$RUNNER_TEMP/cop-checks"
+      - name: Verify shared API contracts
+        run: |
+          swiftc -parse-as-library FinFlow/Core/Models/Models.swift FinFlow/Core/Utilities/Formatters.swift scripts/APIContractChecks.swift -o "$RUNNER_TEMP/api-checks"
+          "$RUNNER_TEMP/api-checks"
       - name: Build for iOS Simulator (no signing)
         run: |
           set -o pipefail

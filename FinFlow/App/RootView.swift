@@ -156,10 +156,13 @@ struct RootView: View {
     }
 }
 
-/// Five clear destinations on iPhone. Secondary features live in "Más";
-/// native SwiftUI navigation adapts naturally to iPad.
+/// Four compact destinations on iPhone; an adaptive native sidebar on iPad.
 struct MainTabView: View {
     var body: some View {
+        if #available(iOS 18.0, *) { tabs.tabViewStyle(.sidebarAdaptable) }
+        else { tabs }
+    }
+    private var tabs: some View {
         TabView {
             DashboardView()
                 .tabItem { Label("Inicio", systemImage: "chart.pie.fill") }
@@ -167,10 +170,8 @@ struct MainTabView: View {
                 .tabItem { Label("Movimientos", systemImage: "arrow.left.arrow.right") }
             GoalsView()
                 .tabItem { Label("Metas", systemImage: "scope") }
-            BudgetsView()
-                .tabItem { Label("Presupuestos", systemImage: "chart.bar.xaxis") }
             MoreView()
-                .tabItem { Label("Más", systemImage: "square.grid.2x2.fill") }
+                .tabItem { Label("Menú", systemImage: "line.3.horizontal") }
         }
         .toolbarBackground(FinFlowTheme.surface, for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
@@ -185,6 +186,9 @@ struct MoreView: View {
             ScreenBackground {
                 List {
                     Section("Organiza tus finanzas") {
+                        NavigationLink { BudgetsView() } label: {
+                            Label("Presupuestos", systemImage: "chart.bar.xaxis")
+                        }
                         NavigationLink {
                             AccountsView()
                         } label: {
@@ -208,6 +212,12 @@ struct MoreView: View {
                     }
 
                     Section("Más herramientas") {
+                        NavigationLink { ReportsView() } label: {
+                            Label("Reportes PDF y Excel", systemImage: "doc.text")
+                        }
+                        NavigationLink { PlansView() } label: {
+                            Label("Planes FinFlow", systemImage: "crown")
+                        }
                         NavigationLink {
                             AdvisorView()
                         } label: {
@@ -222,6 +232,9 @@ struct MoreView: View {
 
                     if session.user?.isAdmin == true {
                         Section("Administración") {
+                            NavigationLink { AdminBillingView() } label: {
+                                Label("Planes y promociones", systemImage: "tag")
+                            }
                             NavigationLink {
                                 AdminView()
                             } label: {
@@ -232,7 +245,7 @@ struct MoreView: View {
                 }
                 .scrollContentBackground(.hidden)
             }
-            .navigationTitle("Más")
+            .navigationTitle("Menú")
         }
     }
 }

@@ -183,6 +183,7 @@ struct CreateTransactionView: View {
     var initialType = "expense"
     var accountNotice: String? = nil
     @State private var description = ""
+    @State private var status = "completed"
     @State private var amount = ""
     @State private var type = "expense"
     @State private var categoryId = 0
@@ -199,8 +200,14 @@ struct CreateTransactionView: View {
                 }
                 Section("Movimiento") {
                     Picker("Tipo", selection: $type) { Text("Gasto").tag("expense"); Text("Ingreso").tag("income") }.pickerStyle(.segmented)
-                    TextField("Descripción", text: $description)
+                    TextField("Título", text: $description)
+                        .onChange(of: description) { _, value in description = String(value.prefix(255)) }
                     COPAmountField("Monto en COP", text: $amount)
+                    Picker("Estado", selection: $status) {
+                        Text("Realizado").tag("completed")
+                        Text("Pendiente").tag("pending")
+                        Text("Cancelado").tag("cancelled")
+                    }
                     DatePicker("Fecha", selection: $date, displayedComponents: .date)
                     if !suitableCategories.isEmpty { Picker("Categoría", selection: $categoryId) { ForEach(suitableCategories) { Text($0.name).tag($0.id) } } }
                     if !accounts.filter({ !$0.archived }).isEmpty { Picker("Billetera", selection: $accountId) { Text("Sin billetera").tag(0); ForEach(accounts.filter { !$0.archived }) { Text($0.name).tag($0.id) } } }
@@ -215,6 +222,7 @@ struct CreateTransactionView: View {
             .onAppear {
                 if let editing {
                     description = editing.description
+                    status = editing.status ?? "completed"
                     amount = String(editing.amount)
                     type = editing.type
                     categoryId = editing.categoryId
@@ -229,10 +237,11 @@ struct CreateTransactionView: View {
         }
     }
     private func save() async {
-        guard !description.trimmingCharacters(in: .whitespaces).isEmpty, suitableCategories.contains(where: { $0.id == categoryId }), let value = Double(amount.replacingOccurrences(of: ",", with: ".")), value.isFinite, value > 0 else { error = "Ingresa una descripción y un monto válido."; return }
+        guard !description.trimmingCharacters(in: .whitespaces).isEmpty, suitableCategories.contains(where: { $0.id == categoryId }), let value = Double(amount.replacingOccurrences(of: ",", with: ".")), value.isFinite, value > 0 else { error = "Ingresa un título y un monto válido."; return }
         isSaving = true; defer { isSaving = false }
         var dto = CreateTransactionRequest(description: description, amount: value, type: type, categoryId: categoryId, date: DateFormatters.isoDay.string(from: date), notes: nil)
         dto.accountId = accountId == 0 ? nil : accountId
+        dto.status = status
         do {
             let path = editing.map { "/transactions/\($0.id)" } ?? "/transactions"
             let method = editing == nil ? "POST" : "PUT"
