@@ -156,25 +156,233 @@ struct RootView: View {
     }
 }
 
-/// Four compact destinations on iPhone; an adaptive native sidebar on iPad.
+/// iPhone keeps the native four-tab shortcuts and gains an optional edge-swipe
+/// navigation drawer. iPad keeps Apple's adaptive sidebar.
 struct MainTabView: View {
-    var body: some View {
-        if #available(iOS 18.0, *) { tabs.tabViewStyle(.sidebarAdaptable) }
-        else { tabs }
+    @EnvironmentObject private var session: SessionStore
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @State private var selectedTab: MainTab = .home
+    @State private var drawerOpen = false
+    @State private var detail: DrawerDestination?
+
+    private enum MainTab: Hashable { case home, transactions, goals, more }
+    private enum DrawerDestination: String, Identifiable {
+        case accounts, budgets, recurring, categories, planned, reports, plans, advisor, settings, admin, billing
+        var id: String { rawValue }
     }
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                tabs
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 26, coordinateSpace: .global)
+                            .onEnded { gesture in
+                                guard sizeClass == .compact, !drawerOpen,
+                                      gesture.startLocation.x >= 24,
+                                      gesture.startLocation.x <= 88 else { return }
+                                let dx = gesture.translation.width
+                                let dy = abs(gesture.translation.height)
+                                guard dx > 72, dy < 45, dx > dy * 1.5 else { return }
+                                withAnimation(.easeOut(duration: 0.22)) { drawerOpen = true }
+                            }
+                    )
+
+                if drawerOpen && sizeClass == .compact {
+                    Color.black.opacity(0.55)
+                        .ignoresSafeArea()
+                        .onTapGesture { closeDrawer() }
+                        .accessibilityLabel("Cerrar menú")
+                        .zIndex(1)
+                    drawer
+                        .frame(width: min(CGFloat(320), geometry.size.width * 0.86))
+                        .frame(maxHeight: .infinity)
+                        .background(FinFlowTheme.surface)
+                        .shadow(color: .black.opacity(0.22), radius: 18, x: 8)
+                        .transition(.move(edge: .leading))
+                        .gesture(
+                            DragGesture(minimumDistance: 26)
+                                .onEnded { gesture in
+                                    let dx = gesture.translation.width
+                                    let dy = abs(gesture.translation.height)
+                                    if dx < -72 && dy < 45 && abs(dx) > dy * 1.5 { closeDrawer() }
+                                }
+                        )
+                        .zIndex(2)
+                }
+            }
+            .overlay(alignment: .topLeading) {
+                if sizeClass == .compact && !drawerOpen {
+                    Button {
+                        withAnimation(.easeOut(duration: 0.22)) { drawerOpen = true }
+                    } label: {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 19, weight: .semibold))
+                            .frame(width: 44, height: 44)
+                            .background(FinFlowTheme.surface, in: RoundedRectangle(cornerRadius: 13))
+                    }
+                    .foregroundStyle(FinFlowTheme.accent)
+                    .accessibilityLabel("Abrir menú FinFlow")
+                    .padding(.leading, 12)
+                    .padding(.top, 2)
+                    .zIndex(3)
+                }
+            }
+            .sheet(item: $detail) { destination in
+                NavigationStack {
+                    detailView(destination)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button("Cerrar") { detail = nil }
+                            }
+                        }
+                }
+            }
+        }
+    }
+
     private var tabs: some View {
-        TabView {
+        let selection = TabView(selection: $selectedTab) {
             DashboardView()
                 .tabItem { Label("Inicio", systemImage: "chart.pie.fill") }
+                .tag(MainTab.home)
             TransactionsView()
                 .tabItem { Label("Movimientos", systemImage: "arrow.left.arrow.right") }
+                .tag(MainTab.transactions)
             GoalsView()
                 .tabItem { Label("Metas", systemImage: "scope") }
+                .tag(MainTab.goals)
             MoreView()
                 .tabItem { Label("Menú", systemImage: "line.3.horizontal") }
+                .tag(MainTab.more)
         }
         .toolbarBackground(FinFlowTheme.surface, for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
+        if #available(iOS 18.0, *) {
+            return AnyView(selection.tabViewStyle(.sidebarAdaptable))
+        } else {
+            return AnyView(selection)
+        }
+    }
+
+    private var drawer: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 12) {
+                Image(systemName: "chart.pie.fill")
+                    .font(.title2)
+                    .foregroundStyle(FinFlowTheme.accent)
+                Text("FinFlow").font(.title2.bold())
+                Spacer()
+                Button { closeDrawer() } label: {
+                    Image(systemName: "xmark").frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("Cerrar menú")
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 12)
+            .padding(.bottom, 10)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(session.user?.name ?? "Tu espacio financiero")
+                    .font(.headline).lineLimit(1)
+                Text("Tus finanzas, con claridad")
+                    .font(.caption).foregroundStyle(FinFlowTheme.secondaryText)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 20)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                    sectionTitle("TU PANORAMA")
+                    tabLink("Inicio", icon: "house", tab: .home)
+                    tabLink("Movimientos", icon: "arrow.left.arrow.right", tab: .transactions)
+                    tabLink("Metas", icon: "scope", tab: .goals)
+                    destinationLink("Gastos planificados", icon: "calendar", destination: .planned)
+                    Divider().padding(.vertical, 10)
+                    sectionTitle("TU DINERO")
+                    destinationLink("Cuentas y billeteras", icon: "wallet.pass", destination: .accounts)
+                    destinationLink("Presupuestos", icon: "chart.bar.xaxis", destination: .budgets)
+                    destinationLink("Recurrentes", icon: "repeat", destination: .recurring)
+                    destinationLink("Categorías", icon: "square.grid.2x2", destination: .categories)
+                    destinationLink("Asesor IA", icon: "sparkles", destination: .advisor)
+                    destinationLink("Reportes", icon: "doc.text", destination: .reports)
+                    Divider().padding(.vertical, 10)
+                    sectionTitle("TU CUENTA")
+                    destinationLink("Planes", icon: "crown", destination: .plans)
+                    destinationLink("Ajustes y privacidad", icon: "gearshape", destination: .settings)
+                    if session.user?.isAdmin == true {
+                        destinationLink("Administración", icon: "lock.shield", destination: .admin)
+                        destinationLink("Planes y promociones", icon: "tag", destination: .billing)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 24)
+            }
+            Text("FinFlow · AEVQOR")
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(FinFlowTheme.secondaryText)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
+        }
+        .foregroundStyle(.primary)
+        .accessibilityAddTraits(.isModal)
+    }
+
+    private func sectionTitle(_ text: String) -> some View {
+        Text(text).font(.caption2.weight(.bold)).tracking(1.2)
+            .foregroundStyle(FinFlowTheme.secondaryText)
+            .padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 4)
+    }
+
+    private func menuRow(_ text: String, icon: String, selected: Bool = false) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: icon).frame(width: 24)
+            Text(text).font(.subheadline.weight(selected ? .bold : .medium))
+            Spacer()
+            if selected { Image(systemName: "checkmark").font(.caption2) }
+        }
+        .foregroundStyle(selected ? FinFlowTheme.accent : Color.primary)
+        .padding(.horizontal, 14)
+        .frame(minHeight: 48)
+        .background(selected ? FinFlowTheme.accent.opacity(0.12) : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 13))
+        .contentShape(Rectangle())
+    }
+
+    private func tabLink(_ text: String, icon: String, tab: MainTab) -> some View {
+        Button {
+            selectedTab = tab
+            closeDrawer()
+        } label: { menuRow(text, icon: icon, selected: selectedTab == tab) }
+        .buttonStyle(.plain)
+    }
+
+    private func destinationLink(_ text: String, icon: String, destination: DrawerDestination) -> some View {
+        Button {
+            closeDrawer()
+            detail = destination
+        } label: { menuRow(text, icon: icon) }
+        .buttonStyle(.plain)
+    }
+
+    private func closeDrawer() {
+        withAnimation(.easeOut(duration: 0.22)) { drawerOpen = false }
+    }
+
+    @ViewBuilder private func detailView(_ destination: DrawerDestination) -> some View {
+        switch destination {
+        case .accounts: AccountsView()
+        case .budgets: BudgetsView()
+        case .recurring: RecurringView()
+        case .categories: CategoriesView()
+        case .planned: PlannedExpensesView()
+        case .reports: ReportsView()
+        case .plans: PlansView()
+        case .advisor: AdvisorView()
+        case .settings: SettingsView()
+        case .admin: AdminView()
+        case .billing: AdminBillingView()
+        }
     }
 }
 
