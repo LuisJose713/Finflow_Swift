@@ -18,6 +18,8 @@ struct SectionCard<Content: View>: View {
         }
         .padding(16).frame(maxWidth: .infinity, alignment: .leading)
         .background(FinFlowTheme.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .stroke(FinFlowTheme.accent.opacity(0.13), lineWidth: 1))
     }
 }
 struct PrimaryButton: View {

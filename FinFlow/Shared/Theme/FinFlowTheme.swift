@@ -2,12 +2,13 @@ import SwiftUI
 import UIKit
 
 enum FinFlowTheme {
-    // System-backed colors automatically adapt to light/dark appearance.
-    static let background = Color(uiColor: .systemGroupedBackground)
-    static let surface = Color(uiColor: .secondarySystemGroupedBackground)
-    static let elevated = Color(uiColor: .tertiarySystemGroupedBackground)
+    // The same quiet navy and warm ivory as the FinFlow drawer.
+    // Dynamic UIColors retain native appearance switching and system controls.
+    static let background = adaptive(light: 0xF6F3ED, dark: 0x0B1220)
+    static let surface = adaptive(light: 0xFFFDF8, dark: 0x0E192B)
+    static let elevated = adaptive(light: 0xF0EBE2, dark: 0x1B2B43)
     static let accent = Color(uiColor: UIColor { traits in
-        traits.userInterfaceStyle == .dark ? UIColor(red: 0.84, green: 0.69, blue: 0.39, alpha: 1) : UIColor(red: 0.43, green: 0.31, blue: 0.12, alpha: 1)
+        traits.userInterfaceStyle == .dark ? UIColor(red: 0.863, green: 0.761, blue: 0.604, alpha: 1) : UIColor(red: 0.541, green: 0.408, blue: 0.216, alpha: 1)
     })
     static let gold = accent
     static let onAccent = Color(uiColor: UIColor { traits in
@@ -16,6 +17,15 @@ enum FinFlowTheme {
     static let mint = Color(red: 0.12, green: 0.66, blue: 0.45)
     static let danger = Color(red: 0.88, green: 0.20, blue: 0.25)
     static let secondaryText = Color.secondary
+
+    private static func adaptive(light: UInt32, dark: UInt32) -> Color {
+        Color(uiColor: UIColor { traits in
+            let hex = traits.userInterfaceStyle == .dark ? dark : light
+            return UIColor(red: CGFloat((hex >> 16) & 255) / 255,
+                           green: CGFloat((hex >> 8) & 255) / 255,
+                           blue: CGFloat(hex & 255) / 255, alpha: 1)
+        })
+    }
 }
 
 /// The drawer sets the rhythm: quick feedback, a gentle settle, no overshoot.
