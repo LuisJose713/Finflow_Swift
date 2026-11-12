@@ -4,6 +4,7 @@ struct SettingsView: View {
     @EnvironmentObject private var session: SessionStore
     @State private var showingLogout = false
     @AppStorage("finflow.appearance") private var appearance = "system"
+    @AppStorage("finflow.dailyRemindersEnabled") private var dailyRemindersEnabled = true
     var body: some View {
             ScreenBackground {
                 Form {
@@ -31,6 +32,14 @@ struct SettingsView: View {
                             Text("Oscuro").tag("dark")
                         }
                         .pickerStyle(.segmented)
+                    }
+                    Section("Recordatorios") {
+                        Toggle("Avisos a las 10:00 a. m. y 4:00 p. m.", isOn: $dailyRemindersEnabled)
+                            .onChange(of: dailyRemindersEnabled) { _, enabled in
+                                Task { await FinFlowDailyReminders.setEnabled(enabled, authenticated: session.isAuthenticated) }
+                            }
+                        Text("Se ajustan a la hora local del dispositivo y no muestran tus importes en la pantalla bloqueada.")
+                            .font(.footnote).foregroundStyle(.secondary)
                     }
                     Section("Acerca de") {
                         LabeledContent("Aplicación", value: "FinFlow iOS")
