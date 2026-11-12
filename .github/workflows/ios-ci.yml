@@ -37,6 +37,10 @@ jobs:
           assert (width, height) == (1024, 1024), "App Store icon must be 1024 square"
           print("Premium app icon valid:", width, height)
           PY
+      - name: Verify COP amount input contract
+        run: |
+          swiftc -parse-as-library FinFlow/Core/Utilities/Formatters.swift scripts/COPInputChecks.swift -o "$RUNNER_TEMP/cop-checks"
+          "$RUNNER_TEMP/cop-checks"
       - name: Build for iOS Simulator (no signing)
         run: |
           set -o pipefail

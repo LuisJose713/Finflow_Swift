@@ -21,6 +21,7 @@ struct PlannedExpensesView: View {
             ScreenBackground {
                 ScrollView {
                     VStack(spacing: 16) {
+                        PresentationCard(cardID: "planned-expenses.intro", eyebrow: "Gastos planeados", title: "Prepárate para lo que viene.", detail: "Planea tus próximos gastos sin perder de vista tus prioridades.", symbol: "calendar.badge.clock")
                         if let error { ErrorBanner(message: error) }
                         if !overdue.isEmpty {
                             Label("Tienes \(overdue.count) gasto(s) vencido(s)", systemImage: "exclamationmark.triangle.fill")
@@ -159,7 +160,7 @@ struct PlannedExpenseForm: View {
             Form {
                 Section("Detalle") {
                     TextField("Nombre del gasto", text: $title)
-                    TextField("Monto (COP)", text: $amount).keyboardType(.decimalPad)
+                    COPAmountField("Monto (COP)", text: $amount)
                     if !expenseCategories.isEmpty {
                         Picker("Categoría", selection: $categoryId) {
                             Text("Sin categoría").tag(0)

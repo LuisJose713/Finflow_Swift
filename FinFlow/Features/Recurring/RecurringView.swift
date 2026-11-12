@@ -16,6 +16,7 @@ struct RecurringView: View {
         ScreenBackground {
             ScrollView {
                 LazyVStack(spacing: 16) {
+                        PresentationCard(cardID: "recurring.intro", eyebrow: "Movimientos recurrentes", title: "Tus hábitos financieros, organizados.", detail: "Programa tus movimientos y revisa las próximas ejecuciones.", symbol: "repeat")
                     if let error { ErrorBanner(message: error) }
                     if let information {
                         Label(information, systemImage: "checkmark.circle")
@@ -176,7 +177,7 @@ struct RecurringEditor: View {
                         Text("Gasto").tag("expense")
                         Text("Ingreso").tag("income")
                     }.pickerStyle(.segmented)
-                    TextField("Monto COP", text: $amount).keyboardType(.decimalPad)
+                    COPAmountField("Monto COP", text: $amount)
                     Picker("Categoría", selection: $categoryID) {
                         Text("Seleccionar").tag(0)
                         ForEach(availableCategories) { category in

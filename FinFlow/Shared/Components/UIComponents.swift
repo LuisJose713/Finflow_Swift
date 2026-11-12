@@ -24,10 +24,10 @@ struct PrimaryButton: View {
     let title: String; var isLoading = false; var action: () -> Void
     var body: some View {
         Button(action: action) {
-            HStack { if isLoading { ProgressView().tint(.white) }; Text(title).fontWeight(.semibold) }
+            HStack { if isLoading { ProgressView().tint(FinFlowTheme.onAccent) }; Text(title).fontWeight(.semibold) }
                 .frame(maxWidth: .infinity).padding(.vertical, 15)
                 .background(FinFlowTheme.accent, in: RoundedRectangle(cornerRadius: 14))
-                .foregroundStyle(.white)
+                .foregroundStyle(FinFlowTheme.onAccent)
         }.disabled(isLoading)
     }
 }
@@ -96,5 +96,93 @@ struct FinFlowBrandWordmark: View {
         .foregroundStyle(.primary)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("FinFlow")
+    }
+}
+
+
+/// Native text styles and SF Symbols respect Dynamic Type and VoiceOver.
+struct PresentationCard: View {
+    let cardID: String
+    let eyebrow: String
+    let title: String
+    let detail: String
+    var symbol = "sparkles"
+    @EnvironmentObject private var preferences: UiPreferencesStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if preferences.hiddenCards.contains(cardID) {
+                Button {
+                    Task { await preferences.setHidden(false, cardID: cardID) }
+                } label: {
+                    Label("Mostrar presentación", systemImage: "rectangle.expand.vertical")
+                        .font(.footnote.weight(.medium)).frame(minHeight: 44)
+                }
+                .buttonStyle(.plain).foregroundStyle(.secondary)
+                .accessibilityLabel("Mostrar presentación de " + eyebrow)
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .top, spacing: 10) {
+                        Label(eyebrow.uppercased(), systemImage: symbol)
+                            .font(.caption.weight(.semibold)).tracking(1.0)
+                            .foregroundStyle(FinFlowTheme.gold)
+                            .padding(.top, 12)
+                        Spacer(minLength: 0)
+                        Button {
+                            Task { await preferences.setHidden(true, cardID: cardID) }
+                        } label: {
+                            Image(systemName: "xmark").font(.subheadline.weight(.semibold))
+                                .frame(width: 44, height: 44).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain).foregroundStyle(.secondary)
+                        .accessibilityLabel("Ocultar presentación de " + eyebrow)
+                    }
+                    Text(title).font(.title2.weight(.bold)).fontDesign(.rounded)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(detail).font(.subheadline).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(18).frame(maxWidth: .infinity, alignment: .leading)
+                .background(FinFlowTheme.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 22).stroke(FinFlowTheme.gold.opacity(0.20), lineWidth: 1))
+            }
+            if let message = preferences.errors[cardID] { ErrorBanner(message: message) }
+        }
+        .disabled(preferences.saving.contains(cardID))
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: preferences.hiddenCards.contains(cardID))
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// A peso remains a peso: typing 25000 never silently becomes 250.00.
+struct COPAmountField: View {
+    let title: String
+    @Binding var value: String
+    @FocusState private var focused: Bool
+
+    init(_ title: String, text: Binding<String>) {
+        self.title = title
+        self._value = text
+    }
+
+    private var display: Binding<String> {
+        Binding(get: { COPInput.display(value, padDecimals: !focused) }, set: { input in
+            if let normalized = COPInput.normalize(input, previous: value) { value = normalized }
+        })
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("$").foregroundStyle(.secondary).accessibilityHidden(true)
+                TextField("0,00", text: display).keyboardType(.decimalPad)
+                    .focused($focused).monospacedDigit().accessibilityLabel(title)
+                    .accessibilityValue(COPInput.display(value, padDecimals: true) + " pesos colombianos")
+                Text("COP").font(.caption.weight(.semibold)).foregroundStyle(.secondary).accessibilityHidden(true)
+            }
+        }
+        .padding(.vertical, 4)
     }
 }

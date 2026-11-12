@@ -29,6 +29,7 @@ struct TransactionsView: View {
         NavigationStack {
             ScreenBackground {
                 VStack(spacing: 12) {
+                        PresentationCard(cardID: "transactions.intro", eyebrow: "Movimientos", title: "Cada movimiento cuenta.", detail: "Una visión clara de tus ingresos y gastos.", symbol: "arrow.left.arrow.right")
                     VStack(spacing: 10) {
                         HStack { Image(systemName: "magnifyingglass").foregroundStyle(FinFlowTheme.secondaryText); TextField("Buscar movimiento", text: $search) }
                             .padding(12).background(FinFlowTheme.surface, in: RoundedRectangle(cornerRadius: 12))
@@ -62,7 +63,7 @@ struct TransactionsView: View {
             }
             .navigationTitle("Movimientos")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { Menu { Button("Exportar PDF", systemImage: "doc.richtext") { Task { await export("pdf") } }; Button("Exportar CSV", systemImage: "tablecells") { Task { await export("csv") } } } label: { Image(systemName: "square.and.arrow.up") }.disabled(isExporting || showingShare) }
+                ToolbarItem(placement: .topBarLeading) { Menu { Button("Exportar PDF", systemImage: "doc.richtext") { Task { await export("pdf") } }; Button("Exportar Excel", systemImage: "tablecells") { Task { await export("xlsx") } }; Button("Exportar CSV", systemImage: "tablecells.badge.ellipsis") { Task { await export("csv") } } } label: { Image(systemName: "square.and.arrow.up") }.disabled(isExporting || showingShare) }
                 ToolbarItem(placement: .topBarTrailing) { Button { showingCreate = true } label: { Image(systemName: "plus.circle.fill") } }
             }
             .task { await load() }
@@ -139,7 +140,8 @@ struct TransactionsView: View {
 
     @MainActor private func export(_ kind: String) async {
         guard isVisible, !isExporting, !showingShare,
-              let token = TokenStore.shared.read("token"), !token.isEmpty else { return }
+              let owner = TokenStore.shared.read("userId"),
+              TokenStore.shared.read("token")?.isEmpty == false else { return }
         let operation = UUID()
         exportOperation = operation
         isExporting = true
@@ -155,7 +157,8 @@ struct TransactionsView: View {
             // A download started before navigation or logout must not persist
             // the previous session's financial report after it completes.
             guard isVisible, exportOperation == operation,
-                  TokenStore.shared.read("token") == token else { return }
+                  TokenStore.shared.read("userId") == owner,
+                  TokenStore.shared.read("token")?.isEmpty == false else { return }
             removeTemporaryExport()
             let url = FileManager.default.temporaryDirectory
                 .appendingPathComponent("transacciones_finflow_\(UUID().uuidString).\(kind)")
@@ -164,7 +167,8 @@ struct TransactionsView: View {
             showingShare = true
         } catch {
             guard isVisible, exportOperation == operation,
-                  TokenStore.shared.read("token") == token else { return }
+                  TokenStore.shared.read("userId") == owner,
+                  TokenStore.shared.read("token")?.isEmpty == false else { return }
             self.error = error.localizedDescription
         }
     }
@@ -196,7 +200,7 @@ struct CreateTransactionView: View {
                 Section("Movimiento") {
                     Picker("Tipo", selection: $type) { Text("Gasto").tag("expense"); Text("Ingreso").tag("income") }.pickerStyle(.segmented)
                     TextField("Descripción", text: $description)
-                    TextField("Monto en COP", text: $amount).keyboardType(.decimalPad)
+                    COPAmountField("Monto en COP", text: $amount)
                     DatePicker("Fecha", selection: $date, displayedComponents: .date)
                     if !suitableCategories.isEmpty { Picker("Categoría", selection: $categoryId) { ForEach(suitableCategories) { Text($0.name).tag($0.id) } } }
                     if !accounts.filter({ !$0.archived }).isEmpty { Picker("Billetera", selection: $accountId) { Text("Sin billetera").tag(0); ForEach(accounts.filter { !$0.archived }) { Text($0.name).tag($0.id) } } }

@@ -22,6 +22,7 @@ struct BudgetsView: View {
             ScreenBackground {
                 ScrollView {
                     LazyVStack(spacing: 16) {
+                        PresentationCard(cardID: "budgets.intro", eyebrow: "Presupuestos", title: "Dale un rumbo a cada peso.", detail: "Define límites por categoría y acompaña tu progreso mensual.", symbol: "chart.bar.xaxis")
                         HStack {
                             Picker("Mes", selection: $month) {
                                 ForEach(1...12, id: \.self) { value in
@@ -220,7 +221,7 @@ struct BudgetEditor: View {
                             }
                         }
                     }
-                    TextField("Monto máximo (COP)", text: $amount).keyboardType(.decimalPad)
+                    COPAmountField("Monto máximo (COP)", text: $amount)
                 }
                 if let error { ErrorBanner(message: error) }
                 Section {

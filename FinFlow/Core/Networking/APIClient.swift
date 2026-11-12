@@ -36,7 +36,7 @@ final class APIClient: @unchecked Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         applyHeaders(to: &request, hasJSONBody: body != nil)
         if let body { request.httpBody = try JSONEncoder().encode(AnyEncodable(body)) }
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await sendWithRenewal(request)
         guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
             if http.statusCode == 401 {
@@ -48,7 +48,7 @@ final class APIClient: @unchecked Sendable {
             throw APIError.server(message.map { String($0.prefix(280)) } ?? "Error HTTP \(http.statusCode)")
         }
         do { return try JSONDecoder().decode(T.self, from: data) }
-        catch { throw APIError.server("La respuesta de \(path) no coincide con el modelo esperado: \(error.localizedDescription)") }
+        catch { throw APIError.decoding }
     }
 
     func perform(_ path: String, method: String = "GET", body: Encodable? = nil) async throws {
@@ -58,7 +58,7 @@ final class APIClient: @unchecked Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         applyHeaders(to: &request, hasJSONBody: body != nil)
         if let body { request.httpBody = try JSONEncoder().encode(AnyEncodable(body)) }
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await sendWithRenewal(request)
         guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
             if http.statusCode == 401 {
@@ -70,6 +70,29 @@ final class APIClient: @unchecked Sendable {
             let message = (payload?["message"] as? String) ?? (payload?["error"] as? String)
             throw APIError.server(message.map { String($0.prefix(280)) } ?? "Error HTTP \(http.statusCode)")
         }
+    }
+
+    private func sendWithRenewal(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        let result = try await session.data(for: request)
+        guard let http = result.1 as? HTTPURLResponse, http.statusCode == 401,
+              !["/auth/login", "/auth/register", "/auth/refresh", "/auth/logout"].contains(request.url?.path ?? "") else { return result }
+        let sentToken = request.value(forHTTPHeaderField: "Authorization").map { String($0.dropFirst("Bearer ".count)) }
+        do {
+            if try await SessionRenewal.shared.renew(failedToken: sentToken) {
+                var replay = request
+                applyHeaders(to: &replay, hasJSONBody: replay.httpBody != nil)
+                let renewedResult = try await session.data(for: replay)
+                if (renewedResult.1 as? HTTPURLResponse)?.statusCode == 401 {
+                    invalidateOnlyTokenUsed(by: replay)
+                    throw APIError.unauthorized
+                }
+                return renewedResult
+            }
+        } catch APIError.unauthorized {
+            invalidateOnlyTokenUsed(by: request)
+            throw APIError.unauthorized
+        }
+        return result
     }
 
     /// Only the exact token that received a 401 may be removed. A response
@@ -87,7 +110,7 @@ final class APIClient: @unchecked Sendable {
         if hasJSONBody { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
         // Public login/registration must not carry a stale bearer token.
         // A previous authenticated session must not be revoked by a failed login.
-        guard request.url?.path != "/auth/login", request.url?.path != "/auth/register" else { return }
+        guard !["/auth/login", "/auth/register", "/auth/refresh", "/auth/logout"].contains(request.url?.path ?? "") else { return }
         if let token = TokenStore.shared.read("token"), !token.isEmpty {
             request.setValue("Bearer \(token.trimmingCharacters(in: .whitespacesAndNewlines))", forHTTPHeaderField: "Authorization")
         }
@@ -99,7 +122,7 @@ final class APIClient: @unchecked Sendable {
         guard let url = components.url else { throw APIError.invalidURL }
         var request = URLRequest(url: url)
         applyHeaders(to: &request, hasJSONBody: false)
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await sendWithRenewal(request)
         guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
         if http.statusCode == 401 {
             invalidateOnlyTokenUsed(by: request)
@@ -114,4 +137,53 @@ private struct AnyEncodable: Encodable {
     private let encodeValue: (Encoder) throws -> Void
     init(_ value: Encodable) { encodeValue = value.encode }
     func encode(to encoder: Encoder) throws { try encodeValue(encoder) }
+}
+
+/// One in-flight renewal per process; raw credentials remain in Keychain.
+actor SessionRenewal {
+    static let shared = SessionRenewal()
+    private var pending: Task<Bool, Error>?
+
+    func renew(failedToken: String?) async throws -> Bool {
+        let current = TokenStore.shared.read("token")
+        if current != failedToken { return sameOwner(current, failedToken) }
+        if let pending { return try await pending.value }
+        let work = Task<Bool, Error> {
+            let refresh = TokenStore.shared.read("refreshToken").flatMap { $0.isEmpty ? nil : $0 }
+            guard current != nil || refresh != nil else { return false }
+            let path = refresh == nil ? "/auth/session" : "/auth/refresh"
+            var request = URLRequest(url: URL(string: APIClient.shared.baseURL + path)!)
+            request.httpMethod = "POST"; request.timeoutInterval = 20
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            if let refresh { request.httpBody = try JSONEncoder().encode(["refreshToken": refresh]) }
+            else {
+                if let current { request.setValue("Bearer " + current, forHTTPHeaderField: "Authorization") }
+                request.httpBody = Data("{}".utf8)
+            }
+            let config = URLSessionConfiguration.ephemeral
+            config.timeoutIntervalForRequest = 20; config.timeoutIntervalForResource = 25
+            let (data, response) = try await URLSession(configuration: config).data(for: request)
+            guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+            if http.statusCode == 401 || http.statusCode == 403 { throw APIError.unauthorized }
+            guard (200..<300).contains(http.statusCode) else { throw APIError.server("No pudimos renovar la sesión. Revisa tu conexión.") }
+            let tokens = try JSONDecoder().decode(AuthResponse.self, from: data)
+            return TokenStore.shared.replaceCredentials(tokens, ifTokenMatches: current)
+        }
+        pending = work
+        defer { pending = nil }
+        return try await work.value
+    }
+
+    private func sameOwner(_ first: String?, _ second: String?) -> Bool {
+        func subject(_ token: String?) -> String? {
+            guard let encoded = token?.split(separator: ".").dropFirst().first else { return nil }
+            var base = String(encoded).replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+            base += String(repeating: "=", count: (4 - base.count % 4) % 4)
+            guard let data = Data(base64Encoded: base),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+            return object["sub"] as? String
+        }
+        guard let firstSubject = subject(first), let secondSubject = subject(second) else { return false }
+        return firstSubject == secondSubject
+    }
 }

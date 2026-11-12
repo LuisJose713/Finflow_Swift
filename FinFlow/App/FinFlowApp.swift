@@ -4,6 +4,7 @@ import UIKit
 @main
 struct FinFlowApp: App {
     @StateObject private var session = SessionStore()
+    @StateObject private var preferences = UiPreferencesStore()
     @AppStorage("finflow.appearance") private var appearance = "system"
 
     private var preferredScheme: ColorScheme? {
@@ -18,6 +19,8 @@ struct FinFlowApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(session)
+                .environmentObject(preferences)
+                .task(id: session.user?.id) { await preferences.load(userID: session.user?.id) }
                 .preferredColorScheme(preferredScheme)
                 .tint(FinFlowTheme.accent)
                 .privacySensitive()

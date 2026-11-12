@@ -1,6 +1,6 @@
 import Foundation
 
-struct AppUser: Codable, Identifiable {
+struct AppUser: Codable, Identifiable, Sendable {
     let id: Int
     let email: String
     let name: String
@@ -29,7 +29,7 @@ struct AppUser: Codable, Identifiable {
     }
 }
 
-struct AuthResponse: Decodable { let token: String; let user: AppUser }
+struct AuthResponse: Decodable, Sendable { let token: String; let user: AppUser; let refreshToken: String? }
 struct LoginRequest: Encodable { let email: String; let password: String }
 struct RegisterRequest: Encodable {
     let name: String

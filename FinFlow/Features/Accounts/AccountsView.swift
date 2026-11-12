@@ -16,6 +16,7 @@ struct AccountsView: View {
         ScreenBackground {
             ScrollView {
                 LazyVStack(spacing: 16) {
+                        PresentationCard(cardID: "accounts.intro", eyebrow: "Cuentas y billeteras", title: "Cada cuenta, en su lugar.", detail: "Organiza tus billeteras y conoce tu saldo disponible.", symbol: "wallet.pass")
                     if let error { ErrorBanner(message: error) }
                     SectionCard(title: "Saldo en tus cuentas", subtitle: "Billeteras y bancos en pesos colombianos") {
                         Text(CurrencyFormatter.format(balance))
@@ -170,7 +171,7 @@ struct FinancialAccountEditor: View {
                         Text("Otra").tag("other")
                     }
                     if account == nil {
-                        TextField("Saldo inicial COP", text: $openingBalance).keyboardType(.decimalPad)
+                        COPAmountField("Saldo inicial COP", text: $openingBalance)
                     } else {
                         LabeledContent("Saldo inicial", value: CurrencyFormatter.format(account?.openingBalance ?? 0))
                         Text("Para mantener la trazabilidad, no se modifica el saldo inicial después de crear la cuenta.")
@@ -239,7 +240,7 @@ struct FinancialTransferEditor: View {
                             Text(account.name).tag(account.id)
                         }
                     }
-                    TextField("Monto COP", text: $amount).keyboardType(.decimalPad)
+                    COPAmountField("Monto COP", text: $amount)
                     DatePicker("Fecha", selection: $date, displayedComponents: .date)
                     TextField("Nota (opcional)", text: $note)
                 }

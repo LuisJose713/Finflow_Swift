@@ -16,6 +16,7 @@ struct GoalsView: View {
             ScreenBackground {
                 ScrollView {
                     VStack(spacing: 14) {
+                        PresentationCard(cardID: "goals.intro", eyebrow: "Tu futuro financiero", title: "Los grandes planes empiezan hoy.", detail: "Haz seguimiento a cada objetivo y celebra tus avances.", symbol: "scope")
                         if let error { ErrorBanner(message: error) }
                         if isLoading { ProgressView().padding(40) }
                         else if goals.isEmpty { EmptyState(icon: "scope", title: "Sin metas todavía", message: "Define un objetivo y convierte tus planes en algo medible.") }
@@ -28,11 +29,30 @@ struct GoalsView: View {
             .task { await load() }
             .sheet(isPresented: $showingForm, onDismiss: { Task { await load() } }) { GoalFormView(goal: editingGoal) }
             .sheet(item: $historyGoal) { goal in GoalHistoryView(goal: goal) }
-            .alert("Agregar fondos", isPresented: Binding(get: { fundingGoal != nil }, set: { if !$0 { fundingGoal = nil } })) {
-                TextField("Monto en COP", text: $fundAmount).keyboardType(.decimalPad)
-                Button("Cancelar", role: .cancel) { fundingGoal = nil }
-                Button("Agregar") { Task { await addFunds() } }
-            } message: { Text("¿Cuánto quieres aportar a esta meta?") }
+            .sheet(item: $fundingGoal) { goal in
+                NavigationStack {
+                    Form {
+                        Section(goal.name) {
+                            COPAmountField("Monto del aporte", text: $fundAmount)
+                            Text("El aporte se registra en pesos colombianos.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                        if let error { ErrorBanner(message: error) }
+                    }
+                    .navigationTitle("Agregar fondos")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancelar") { fundingGoal = nil }.disabled(isFunding)
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Agregar") { Task { await addFunds() } }
+                                .disabled(isFunding || (Double(fundAmount) ?? 0) <= 0)
+                        }
+                    }
+                    .interactiveDismissDisabled(isFunding)
+                }
+            }
         }
     }
     private func goalCard(_ goal: FinanceGoal) -> some View {
@@ -73,7 +93,7 @@ struct GoalFormView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Objetivo") { TextField("Nombre de la meta", text: $name); TextField("Monto objetivo (COP)", text: $target).keyboardType(.decimalPad); if goal == nil { TextField("Ahorro inicial (COP)", text: $current).keyboardType(.decimalPad) } else { LabeledContent("Ahorro acumulado", value: CurrencyFormatter.format(goal?.currentAmount ?? 0)) }; DatePicker("Fecha objetivo", selection: $deadline, displayedComponents: .date); TextField("Descripción (opcional)", text: $description, axis: .vertical) }
+                Section("Objetivo") { TextField("Nombre de la meta", text: $name); COPAmountField("Monto objetivo (COP)", text: $target); if goal == nil { COPAmountField("Ahorro inicial (COP)", text: $current) } else { LabeledContent("Ahorro acumulado", value: CurrencyFormatter.format(goal?.currentAmount ?? 0)) }; DatePicker("Fecha objetivo", selection: $deadline, displayedComponents: .date); TextField("Descripción (opcional)", text: $description, axis: .vertical) }
                 if let error { Text(error).foregroundStyle(.red) }
                 Button { Task { await save() } } label: { HStack { Spacer(); if isSaving { ProgressView() } else { Text("Guardar meta") }; Spacer() } }.disabled(isSaving)
             }.navigationTitle(goal == nil ? "Nueva meta" : "Editar meta").navigationBarTitleDisplayMode(.inline).toolbar { ToolbarItem(placement: .topBarLeading) { Button("Cancelar") { dismiss() } } }
