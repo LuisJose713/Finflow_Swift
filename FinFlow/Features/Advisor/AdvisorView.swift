@@ -14,6 +14,7 @@ struct AdvisorView: View {
                     ScrollViewReader { proxy in
                         ScrollView {
                             VStack(spacing: 14) {
+                                PresentationCard(cardID: "advisor.intro", eyebrow: "Asesor IA", title: "Una visión clara de tus finanzas.", detail: "Explora tus hábitos y toma decisiones con más información.", symbol: "sparkles")
                                 if messages.isEmpty {
                                     VStack(spacing: 15) {
                                         Image(systemName: "sparkles").font(.system(size: 40)).foregroundStyle(FinFlowTheme.accent).padding(22).background(FinFlowTheme.accent.opacity(0.14), in: Circle())
@@ -30,7 +31,7 @@ struct AdvisorView: View {
                     }
                     HStack(alignment: .bottom, spacing: 10) {
                         TextField("Escribe tu consulta…", text: $input, axis: .vertical).lineLimit(1...5).focused($inputFocused).padding(12).background(FinFlowTheme.elevated, in: RoundedRectangle(cornerRadius: 16))
-                        Button { Task { await send() } } label: { Image(systemName: "arrow.up").font(.headline).foregroundStyle(.white).frame(width: 46, height: 46).background(FinFlowTheme.accent, in: Circle()) }.disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending)
+                        Button { Task { await send() } } label: { Image(systemName: "arrow.up").font(.headline).foregroundStyle(FinFlowTheme.onAccent).frame(width: 46, height: 46).background(FinFlowTheme.accent, in: Circle()) }.disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending)
                     }.padding(12).background(FinFlowTheme.surface)
                 }
             }
@@ -39,7 +40,7 @@ struct AdvisorView: View {
     }
     private func messageBubble(_ message: ChatMessage) -> some View {
         HStack { if message.role != "user" { Spacer(minLength: 35) }
-            Text(message.content).textSelection(.enabled).padding(13).foregroundStyle(message.role == "user" ? Color.white : Color.primary).background(message.role == "user" ? FinFlowTheme.accent : FinFlowTheme.surface, in: RoundedRectangle(cornerRadius: 16))
+            Text(message.content).textSelection(.enabled).padding(13).foregroundStyle(message.role == "user" ? FinFlowTheme.onAccent : Color.primary).background(message.role == "user" ? FinFlowTheme.accent : FinFlowTheme.surface, in: RoundedRectangle(cornerRadius: 16))
             if message.role == "user" { Spacer(minLength: 35) }
         }
     }

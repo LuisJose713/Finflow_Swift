@@ -50,16 +50,20 @@ enum DateFormatters {
 /// Canonical decimal dots in the model; Colombian separators in the field.
 enum COPInput {
     static func normalize(_ input: String, previous: String = "") -> String? {
-        let raw = input.replacingOccurrences(of: "COP", with: "", options: .caseInsensitive)
+        var raw = input.replacingOccurrences(of: "COP", with: "", options: .caseInsensitive)
             .replacingOccurrences(of: "$", with: "").filter { !$0.isWhitespace }
         if raw.isEmpty { return "" }
         guard raw.allSatisfy({ "0123456789.,".contains($0) }), raw.filter({ $0 == "," }).count <= 1 else { return nil }
+        let previousDisplay = display(previous, padDecimals: false)
+        let editingWhole = !previous.contains(".") && previousDisplay.contains(".") &&
+            abs(input.count - previousDisplay.count) <= 1 && !raw.contains(",") && !raw.hasSuffix(".")
+        if editingWhole { raw = raw.replacingOccurrences(of: ".", with: "") }
         let commas = raw.firstIndex(of: ",")
         let dots = raw.filter { $0 == "." }.count
         var separator = commas
-        if commas == nil, dots == 1, let dot = raw.firstIndex(of: ".") {
+        if commas == nil, let dot = raw.lastIndex(of: ".") {
             let fractionSize = raw.distance(from: raw.index(after: dot), to: raw.endIndex)
-            let editingDecimal = previous.contains(".") && abs(input.count - previous.count) <= 1
+            let editingDecimal = dots == 1 && previous.contains(".") && abs(input.count - previous.count) <= 1
             if fractionSize <= 2 || editingDecimal { separator = dot }
         }
         let wholeText = separator.map { String(raw[..<$0]) } ?? raw

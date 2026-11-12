@@ -25,8 +25,8 @@ struct AuthView: View {
                     VStack(spacing: 15) {
                         if isRegistering { field("Nombre completo", text: $name, icon: "person") }
                         field("Correo electrónico", text: $email, icon: "envelope", contentType: .emailAddress)
-                        SecureField("Contraseña", text: $password).textContentType(isRegistering ? .newPassword : .password).textInputAutocapitalization(.never).padding(15).background(FinFlowTheme.elevated, in: RoundedRectangle(cornerRadius: 13))
-                        if isRegistering { SecureField("Confirmar contraseña", text: $confirmPassword).textContentType(.newPassword).padding(15).background(FinFlowTheme.elevated, in: RoundedRectangle(cornerRadius: 13)) }
+                        PasswordInput("Contraseña", text: $password, isNew: isRegistering)
+                        if isRegistering { PasswordInput("Confirmar contraseña", text: $confirmPassword, isNew: true) }
                         if isRegistering {
                             VStack(alignment: .leading, spacing: 8) {
                                 Label("Tratamiento de datos personales", systemImage: "lock.shield")
@@ -103,6 +103,7 @@ struct AuthView: View {
             .padding(15).background(FinFlowTheme.elevated, in: RoundedRectangle(cornerRadius: 13))
     }
     private func submit() async {
+        guard password.utf8.count <= 72 else { session.errorMessage = "La contraseña supera el máximo de 72 bytes. Los acentos y emojis pueden ocupar más de un byte."; return }
         guard email.contains("@"), password.count >= 8 else { session.errorMessage = "Ingresa un correo válido y una contraseña de al menos 8 caracteres."; return }
         if isRegistering {
             guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { session.errorMessage = "Escribe tu nombre."; return }

@@ -186,3 +186,31 @@ struct COPAmountField: View {
         .padding(.vertical, 4)
     }
 }
+
+
+struct PasswordInput: View {
+    let title: String
+    @Binding var text: String
+    var isNew = false
+    @State private var revealed = false
+    init(_ title: String, text: Binding<String>, isNew: Bool = false) {
+        self.title = title; self._text = text; self.isNew = isNew
+    }
+    var body: some View {
+        HStack {
+            Group {
+                if revealed { TextField(title, text: $text) }
+                else { SecureField(title, text: $text) }
+            }
+            .textContentType(isNew ? .newPassword : .password)
+            .textInputAutocapitalization(.never).autocorrectionDisabled().privacySensitive()
+            Button { revealed.toggle() } label: {
+                Image(systemName: revealed ? "eye.slash" : "eye").frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain).foregroundStyle(.secondary)
+            .accessibilityLabel(revealed ? "Ocultar contraseña" : "Mostrar contraseña")
+        }
+        .padding(.leading, 15).padding(.trailing, 3).padding(.vertical, 4)
+        .background(FinFlowTheme.elevated, in: RoundedRectangle(cornerRadius: 13))
+    }
+}

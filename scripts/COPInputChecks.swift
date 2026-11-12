@@ -18,6 +18,10 @@ struct COPInputChecks {
         precondition(COPInput.display("1250.5", padDecimals: true) == "1.250,50")
         precondition(COPInput.display("1250.", padDecimals: false) == "1.250,")
         precondition(COPInput.display("0", padDecimals: true) == "0,00")
+        precondition(COPInput.normalize("25.0000", previous: "25000") == "250000")
+        precondition(COPInput.normalize("25.00", previous: "25000") == "2500")
+        precondition(COPInput.normalize("1.250.", previous: "1250") == "1250.")
+        precondition(COPInput.normalize("1.250.5", previous: "1250.") == "1250.5")
         print("COP input contract verified: units, grouping, cents and boundaries.")
     }
 }

@@ -22,6 +22,7 @@ struct CategoriesView: View {
         ScreenBackground {
             ScrollView {
                 LazyVStack(spacing: 16) {
+                    PresentationCard(cardID: "categories.intro", eyebrow: "Mis categorías", title: "Un lugar para cada movimiento.", detail: "Personaliza tus categorías de ingresos y gastos.", symbol: "square.grid.2x2")
                     if let error { ErrorBanner(message: error) }
                     if loading { ProgressView("Cargando categorías…").padding(24) }
                     else if categories.isEmpty {
