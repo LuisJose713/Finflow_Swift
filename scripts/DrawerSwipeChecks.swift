@@ -5,7 +5,7 @@ import Foundation
         for width in [CGFloat(320), 375, 430, 768] {
             precondition(!DrawerSwipePolicy.canStart(x: 23, viewportWidth: width, isOpen: false))
             precondition(DrawerSwipePolicy.canStart(x: 60, viewportWidth: width, isOpen: false))
-            precondition(!DrawerSwipePolicy.canStart(x: 180, viewportWidth: width, isOpen: false))
+            precondition(DrawerSwipePolicy.canStart(x: width - 15, viewportWidth: width, isOpen: false))
         }
         precondition(DrawerSwipePolicy.isHorizontal(CGSize(width: 30, height: 5), isOpen: false))
         precondition(!DrawerSwipePolicy.isHorizontal(CGSize(width: 5, height: 30), isOpen: false))
