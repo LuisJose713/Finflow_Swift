@@ -7,6 +7,8 @@ enum FinFlowTheme {
     static let background = adaptive(light: 0xF6F3ED, dark: 0x0B1220)
     static let surface = adaptive(light: 0xFFFDF8, dark: 0x0E192B)
     static let elevated = adaptive(light: 0xF0EBE2, dark: 0x1B2B43)
+    static let action = adaptive(light: 0x0E192B, dark: 0xDCC29A)
+    static let onAction = adaptive(light: 0xFFFDF8, dark: 0x0E192B)
     static let accent = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark ? UIColor(red: 0.863, green: 0.761, blue: 0.604, alpha: 1) : UIColor(red: 0.541, green: 0.408, blue: 0.216, alpha: 1)
     })

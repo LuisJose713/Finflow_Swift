@@ -26,10 +26,10 @@ struct PrimaryButton: View {
     let title: String; var isLoading = false; var action: () -> Void
     var body: some View {
         Button(action: action) {
-            HStack { if isLoading { ProgressView().tint(FinFlowTheme.onAccent) }; Text(title).fontWeight(.semibold) }
+            HStack { if isLoading { ProgressView().tint(FinFlowTheme.onAction) }; Text(title).fontWeight(.semibold) }
                 .frame(maxWidth: .infinity).padding(.vertical, 15)
-                .background(FinFlowTheme.accent, in: RoundedRectangle(cornerRadius: 14))
-                .foregroundStyle(FinFlowTheme.onAccent)
+                .background(FinFlowTheme.action, in: RoundedRectangle(cornerRadius: 14))
+                .foregroundStyle(FinFlowTheme.onAction)
         }.buttonStyle(FinFlowPressStyle()).disabled(isLoading)
     }
 }
