@@ -268,10 +268,10 @@ struct MainTabView: View {
     private var drawer: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
-                Image(systemName: "chart.pie.fill")
-                    .font(.title2)
-                    .foregroundStyle(FinFlowTheme.accent)
-                Text("FinFlow").font(.title2.bold())
+                FinFlowBrandSymbol(size: 42)
+                FinFlowBrandWordmark()
+                    .scaleEffect(0.72, anchor: .leading)
+                    .frame(width: 122, height: 42, alignment: .leading)
                 Spacer()
                 Button { closeDrawer() } label: {
                     Image(systemName: "xmark").frame(width: 44, height: 44)
@@ -282,11 +282,19 @@ struct MainTabView: View {
             .padding(.top, 12)
             .padding(.bottom, 10)
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(session.user?.name ?? "Tu espacio financiero")
-                    .font(.headline).lineLimit(1)
-                Text("Tus finanzas, con claridad")
-                    .font(.caption).foregroundStyle(FinFlowTheme.secondaryText)
+            HStack(spacing: 12) {
+                Text(String((session.user?.name ?? "F").prefix(1)).uppercased())
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(FinFlowTheme.accent)
+                    .frame(width: 44, height: 44)
+                    .background(FinFlowTheme.accent.opacity(0.12), in: Circle())
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(session.user?.name ?? "Tu espacio financiero")
+                        .font(.headline).lineLimit(1)
+                    Text("Tus finanzas, con claridad")
+                        .font(.caption).foregroundStyle(FinFlowTheme.secondaryText)
+                }
+                Spacer(minLength: 0)
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 20)
@@ -337,7 +345,7 @@ struct MainTabView: View {
     private func menuRow(_ text: String, icon: String, selected: Bool = false) -> some View {
         HStack(spacing: 14) {
             Image(systemName: icon).frame(width: 24)
-            Text(text).font(.subheadline.weight(selected ? .bold : .medium))
+            Text(text).font(.body.weight(selected ? .semibold : .medium))
             Spacer()
             if selected { Image(systemName: "checkmark").font(.caption2) }
         }
