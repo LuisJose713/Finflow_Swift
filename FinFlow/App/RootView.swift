@@ -162,7 +162,9 @@ struct MainTabView: View {
     @EnvironmentObject private var session: SessionStore
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var selectedTab: MainTab = .home
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var drawerOpen = false
+    @State private var drawerOffset: CGFloat?
     @State private var detail: DrawerDestination?
 
     private enum MainTab: Hashable { case home, transactions, goals, more }
@@ -173,48 +175,52 @@ struct MainTabView: View {
 
     var body: some View {
         GeometryReader { geometry in
+            let width = min(CGFloat(320), geometry.size.width * 0.86)
+            let offset = drawerOffset ?? (drawerOpen ? 0 : -width)
+            let progress = min(1, max(0, 1 + offset / width))
             ZStack(alignment: .leading) {
                 tabs
-                    .simultaneousGesture(
-                        DragGesture(minimumDistance: 26, coordinateSpace: .global)
-                            .onEnded { gesture in
-                                guard sizeClass == .compact, !drawerOpen,
-                                      gesture.startLocation.x >= 24,
-                                      gesture.startLocation.x <= 88 else { return }
-                                let dx = gesture.translation.width
-                                let dy = abs(gesture.translation.height)
-                                guard dx > 72, dy < 45, dx > dy * 1.5 else { return }
-                                withAnimation(.easeOut(duration: 0.22)) { drawerOpen = true }
-                            }
-                    )
+                    .accessibilityHidden(drawerOpen && sizeClass == .compact)
 
-                if drawerOpen && sizeClass == .compact {
-                    Color.black.opacity(0.55)
+                if sizeClass == .compact {
+                    Color.black.opacity(0.55 * progress)
                         .ignoresSafeArea()
+                        .contentShape(Rectangle())
                         .onTapGesture { closeDrawer() }
-                        .accessibilityLabel("Cerrar menú")
+                        .allowsHitTesting(progress > 0)
+                        .accessibilityHidden(true)
                         .zIndex(1)
                     drawer
-                        .frame(width: min(CGFloat(320), geometry.size.width * 0.86))
+                        .frame(width: width)
                         .frame(maxHeight: .infinity)
                         .background(FinFlowTheme.surface)
-                        .shadow(color: .black.opacity(0.22), radius: 18, x: 8)
-                        .transition(.move(edge: .leading))
-                        .gesture(
-                            DragGesture(minimumDistance: 26)
-                                .onEnded { gesture in
-                                    let dx = gesture.translation.width
-                                    let dy = abs(gesture.translation.height)
-                                    if dx < -72 && dy < 45 && abs(dx) > dy * 1.5 { closeDrawer() }
-                                }
-                        )
+                        .shadow(color: .black.opacity(0.22 * progress), radius: 18, x: 8)
+                        .offset(x: offset)
+                        .allowsHitTesting(progress > 0)
+                        .accessibilityHidden(!drawerOpen)
+                        .accessibilityAction(.escape) { closeDrawer() }
                         .zIndex(2)
                 }
             }
+            .background {
+                DrawerPanGesture(
+                    enabled: sizeClass == .compact && detail == nil,
+                    isOpen: drawerOpen,
+                    drawerWidth: width,
+                    changed: { offset in
+                        var transaction = Transaction()
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) { drawerOffset = offset }
+                    },
+                    ended: { open in setDrawer(open) },
+                    cancelled: { setDrawer(drawerOpen) }
+                )
+            }
+            .onChange(of: sizeClass) { _, _ in setDrawer(false) }
             .overlay(alignment: .topLeading) {
-                if sizeClass == .compact && !drawerOpen {
+                if sizeClass == .compact && !drawerOpen && drawerOffset == nil {
                     Button {
-                        withAnimation(.easeOut(duration: 0.22)) { drawerOpen = true }
+                        setDrawer(true)
                     } label: {
                         Image(systemName: "line.3.horizontal")
                             .font(.system(size: 19, weight: .semibold))
@@ -362,7 +368,7 @@ struct MainTabView: View {
             selectedTab = tab
             closeDrawer()
         } label: { menuRow(text, icon: icon, selected: selectedTab == tab) }
-        .buttonStyle(.plain)
+        .buttonStyle(FinFlowPressStyle())
     }
 
     private func destinationLink(_ text: String, icon: String, destination: DrawerDestination) -> some View {
@@ -370,12 +376,17 @@ struct MainTabView: View {
             closeDrawer()
             detail = destination
         } label: { menuRow(text, icon: icon) }
-        .buttonStyle(.plain)
+        .buttonStyle(FinFlowPressStyle())
     }
 
-    private func closeDrawer() {
-        withAnimation(.easeOut(duration: 0.22)) { drawerOpen = false }
+    private func setDrawer(_ open: Bool) {
+        withAnimation(reduceMotion ? nil : FinFlowMotion.panel) {
+            drawerOpen = open
+            drawerOffset = nil
+        }
     }
+
+    private func closeDrawer() { setDrawer(false) }
 
     @ViewBuilder private func detailView(_ destination: DrawerDestination) -> some View {
         switch destination {
@@ -634,3 +645,4 @@ struct PrivacyConsentGateSheet: View {
         }
     }
 }
+

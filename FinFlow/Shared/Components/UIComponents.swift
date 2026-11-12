@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ScreenBackground<Content: View>: View {
     @ViewBuilder var content: Content
-    var body: some View { ZStack { FinFlowTheme.background.ignoresSafeArea(); content } }
+    var body: some View { ZStack { FinFlowTheme.background.ignoresSafeArea(); content.modifier(FinFlowScreenEntrance()) } }
 }
 struct SectionCard<Content: View>: View {
     let title: String
@@ -28,7 +28,7 @@ struct PrimaryButton: View {
                 .frame(maxWidth: .infinity).padding(.vertical, 15)
                 .background(FinFlowTheme.accent, in: RoundedRectangle(cornerRadius: 14))
                 .foregroundStyle(FinFlowTheme.onAccent)
-        }.disabled(isLoading)
+        }.buttonStyle(FinFlowPressStyle()).disabled(isLoading)
     }
 }
 struct EmptyState: View {
@@ -153,7 +153,7 @@ struct PresentationCard: View {
             if let message = preferences.errors[cardID] { ErrorBanner(message: message) }
         }
         .disabled(preferences.saving.contains(cardID))
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: preferences.hiddenCards.contains(cardID))
+        .animation(reduceMotion ? nil : FinFlowMotion.panel, value: preferences.hiddenCards.contains(cardID))
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -217,3 +217,4 @@ struct PasswordInput: View {
         .background(FinFlowTheme.elevated, in: RoundedRectangle(cornerRadius: 13))
     }
 }
+
