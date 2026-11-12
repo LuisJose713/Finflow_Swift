@@ -74,12 +74,15 @@ struct DrawerPanGesture: UIViewRepresentable {
         }
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-            guard configuration.enabled, let anchor, let host = pan.view,
+            guard configuration.enabled, let host = pan.view,
                   controller?.presentedViewController == nil,
-                  let touchedView = touch.view, touchedView.isDescendant(of: host),
-                  anchor.bounds.contains(touch.location(in: anchor)) else { return false }
-            let x = touch.location(in: anchor).x
-            guard DrawerSwipePolicy.canStart(x: x, viewportWidth: anchor.bounds.width, isOpen: configuration.isOpen) else { return false }
+                  let touchedView = touch.view, touchedView.isDescendant(of: host) else { return false }
+            // The recognizer is installed on the hosting controller, not the
+            // invisible SwiftUI anchor. That anchor can be resized or offset
+            // during tab transitions; always hit-test in the host's coordinates.
+            let point = touch.location(in: host)
+            guard host.bounds.contains(point),
+                  DrawerSwipePolicy.canStart(x: point.x, viewportWidth: host.bounds.width, isOpen: configuration.isOpen) else { return false }
             if !configuration.isOpen {
                 var responder: UIResponder? = touchedView
                 while let current = responder {
