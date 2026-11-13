@@ -194,6 +194,22 @@ final class FinFlowUITests: XCTestCase {
         capture(app, "drawer-swipe")
     }
 
+    func testPrivacyNoticeStaysDismissedAfterNavigationAndResume() {
+        let app = launch(); signIn(app)
+        tap(app.tabBars.buttons["Metas"])
+        XCTAssertTrue(app.buttons["goals.add"].waitForExistence(timeout: 8))
+        tap(app.tabBars.buttons["Inicio"])
+        XCTAssertTrue(app.staticTexts["dashboard.balance"].waitForExistence(timeout: 8))
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        let menu = app.buttons["navigation.openMenu"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 8))
+        tap(menu)
+        XCTAssertTrue(app.buttons["Cerrar menú"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.buttons["privacy.continue"].exists)
+        capture(app, "resumed-session")
+    }
+
     func testAdministratorDestinationsWithSyntheticRole() {
         let app = launch(admin: true); signIn(app)
         for route in ["admin", "billing"] {

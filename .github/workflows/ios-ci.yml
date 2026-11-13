@@ -80,6 +80,7 @@ jobs:
           # booted simulator; the first launch can otherwise time out in Xcode.
           xcrun simctl install "$UDID" "$RUNNER_TEMP/FinFlowDerivedData/Build/Products/Debug-iphonesimulator/FinFlow.app"
           SIMCTL_CHILD_FINFLOW_UI_TESTING=1 xcrun simctl launch "$UDID" com.finflow.ios
+          sleep 3
           xcrun simctl terminate "$UDID" com.finflow.ios
           xcodebuild test -project FinFlow.xcodeproj -scheme FinFlow \
             -destination "platform=iOS Simulator,id=$UDID" \
@@ -87,6 +88,13 @@ jobs:
             -resultBundlePath "$RUNNER_TEMP/FinFlow-iPhone.xcresult" \
             -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- \
             2>&1 | tee "$RUNNER_TEMP/finflow-test.log"
+      - name: Upload iPhone regression log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: finflow-ios-iphone-test-log
+          path: ${{ runner.temp }}/finflow-test.log
+          retention-days: 7
       - name: iPad layout and accessibility tests
         if: ${{ !cancelled() }}
         shell: bash

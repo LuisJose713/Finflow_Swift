@@ -15,7 +15,10 @@ struct RootView: View {
     private let noticeRevision = "ios-privacy-notice-v1"
 
     var body: some View {
-        Group {
+        // Keep session/privacy tasks on a stable container when login or the
+        // local lock changes the displayed screen. Group distributes these
+        // modifiers to its children and would restart them on each transition.
+        ZStack {
             if checkingSession {
                 ZStack {
                     FinFlowTheme.background.ignoresSafeArea()
@@ -71,6 +74,7 @@ struct RootView: View {
 
     @MainActor
     private func refreshPrivacy(userID: Int) async {
+        guard !Task.isCancelled, session.isAuthenticated, session.user?.id == userID else { return }
         privacyError = nil
         var candidate: PrivacyPolicy?
         do {
@@ -80,13 +84,13 @@ struct RootView: View {
             // endpoint fails. Do not invent legal publication status.
         }
 
-        guard session.isAuthenticated, session.user?.id == userID else { return }
+        guard !Task.isCancelled, session.isAuthenticated, session.user?.id == userID else { return }
         privacyPolicy = candidate
 
         if let candidate, candidate.ready {
             do {
                 let status: PrivacyStatus = try await APIClient.shared.request("/privacy/status")
-                guard session.isAuthenticated, session.user?.id == userID else { return }
+                guard !Task.isCancelled, session.isAuthenticated, session.user?.id == userID else { return }
                 if !status.policyReady || status.version != candidate.version {
                     privacyError = "No pudimos comprobar la versión de la política. Intenta de nuevo."
                     requirePrivacyConsent = true
@@ -99,7 +103,7 @@ struct RootView: View {
                     return
                 }
             } catch {
-                guard session.isAuthenticated, session.user?.id == userID else { return }
+                guard !Task.isCancelled, session.isAuthenticated, session.user?.id == userID else { return }
                 privacyError = "No pudimos verificar tu autorización. Comprueba la conexión e inténtalo."
                 requirePrivacyConsent = true
                 showPrivacyNotice = false
@@ -151,6 +155,7 @@ struct RootView: View {
                     marketingConsent: marketing
                 )
             )
+            guard !Task.isCancelled, session.isAuthenticated, session.user?.id == userID else { return false }
             guard response.accepted && response.version == policy.version else {
                 privacyError = "El servidor no confirmó la autorización."
                 return false
@@ -162,6 +167,7 @@ struct RootView: View {
             showPrivacyNotice = false
             return true
         } catch {
+            guard !Task.isCancelled, session.isAuthenticated, session.user?.id == userID else { return false }
             privacyError = "No pudimos guardar tu decisión: \(error.localizedDescription)"
             return false
         }
@@ -215,7 +221,7 @@ struct MainTabView: View {
                         .allowsHitTesting(progress > 0)
                         .accessibilityHidden(!drawerOpen)
                         .accessibilityAction(.escape) { closeDrawer() }
-                        .transition(.identity)
+                        .transition(.move(edge: .leading))
                         .zIndex(2)
                 }
             }

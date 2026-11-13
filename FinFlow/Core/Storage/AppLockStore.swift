@@ -64,6 +64,7 @@ final class AppLockStore: ObservableObject {
     private var operation = UUID()
     private var attemptedAutomatically = false
     private var active = true
+    private var protectionArmed = false
 
     init(authenticator: any LocalAuthenticationProviding = DeviceAuthenticator(), defaults: UserDefaults = .standard) {
         self.authenticator = authenticator
@@ -82,7 +83,8 @@ final class AppLockStore: ObservableObject {
         attemptedAutomatically = false
         error = nil
         isEnabled = defaults.object(forKey: preferenceKey) as? Bool ?? true
-        isLocked = ownerID != nil && isEnabled && isAvailable
+        protectionArmed = ownerID != nil && isEnabled && isAvailable
+        isLocked = protectionArmed
     }
 
     func becameInactive() { active = false }
@@ -91,11 +93,20 @@ final class AppLockStore: ObservableObject {
         active = false
         cancelAttempt()
         attemptedAutomatically = false
-        if ownerID != nil && isEnabled { isLocked = true }
+        if ownerID != nil && isEnabled {
+            // Do not create an impossible lock on a device that never had a
+            // passcode. Once protection was available, losing it fails closed.
+            protectionArmed = protectionArmed || isAvailable
+            isLocked = protectionArmed
+        }
     }
 
     func becameActive() async {
         active = true
+        if ownerID != nil && isEnabled && !protectionArmed && isAvailable {
+            protectionArmed = true
+            isLocked = true
+        }
         await unlock(automatically: true)
     }
 
@@ -136,6 +147,7 @@ final class AppLockStore: ObservableObject {
                   operation == current else { return }
             defaults.set(enabled, forKey: preferenceKey)
             isEnabled = enabled
+            protectionArmed = enabled
         } catch {
             guard operation == current else { return }
             self.error = "No se cambió la protección. Confirma tu identidad para continuar."
@@ -146,6 +158,7 @@ final class AppLockStore: ObservableObject {
         guard ownerID != nil, isEnabled, isAvailable else { return }
         cancelAttempt()
         attemptedAutomatically = true
+        protectionArmed = true
         isLocked = true
     }
 

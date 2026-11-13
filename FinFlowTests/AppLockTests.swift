@@ -96,6 +96,36 @@ final class AppLockTests: XCTestCase {
         XCTAssertNotNil(store.error)
     }
 
+    @MainActor func testDeviceWithoutPasscodeDoesNotAcquireAnImpossibleLock() async {
+        let auth = TestAuthenticator(); auth.isAvailable = false
+        let store = makeStore(auth); store.prepare(ownerID: 1)
+        XCTAssertFalse(store.isLocked)
+        store.enteredBackground(); await store.becameActive()
+        XCTAssertFalse(store.isLocked)
+        XCTAssertEqual(auth.calls, 0)
+    }
+
+    @MainActor func testConfiguringPasscodeArmsProtectionOnReturn() async {
+        let auth = TestAuthenticator(); auth.isAvailable = false
+        let store = makeStore(auth); store.prepare(ownerID: 1)
+        store.enteredBackground()
+        auth.isAvailable = true
+        await store.becameActive()
+        XCTAssertTrue(store.isLocked)
+        XCTAssertEqual(auth.calls, 1)
+    }
+
+    @MainActor func testRemovingPasscodeCannotBypassPreviouslyUnlockedProtection() async {
+        let auth = TestAuthenticator(); auth.result = true
+        let store = makeStore(auth); store.prepare(ownerID: 1)
+        await store.unlock()
+        XCTAssertFalse(store.isLocked)
+        auth.isAvailable = false
+        store.enteredBackground(); await store.becameActive()
+        XCTAssertTrue(store.isLocked)
+        XCTAssertNotNil(store.error)
+    }
+
     @MainActor func testConcurrentUnlockStartsOnlyOnePrompt() async {
         let auth = TestAuthenticator(); auth.delayed = true
         let store = makeStore(auth); store.prepare(ownerID: 1)
