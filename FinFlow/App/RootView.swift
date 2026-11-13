@@ -177,6 +177,7 @@ struct MainTabView: View {
     @State private var selectedTab: MainTab = .home
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var drawerOpen = false
+    @State private var drawerMounted = false
     @State private var drawerOffset: CGFloat?
     @State private var detail: DrawerDestination?
 
@@ -195,7 +196,9 @@ struct MainTabView: View {
                 tabs
                     .accessibilityHidden(drawerOpen && sizeClass == .compact)
 
-                if sizeClass == .compact {
+                // An offscreen modal drawer must not stay in the accessibility
+                // tree: it can steal focus from the privacy sheet and tab bar.
+                if sizeClass == .compact && (drawerMounted || drawerOffset != nil) {
                     Color.black.opacity(0.55 * progress)
                         .ignoresSafeArea()
                         .contentShape(Rectangle())
@@ -212,6 +215,7 @@ struct MainTabView: View {
                         .allowsHitTesting(progress > 0)
                         .accessibilityHidden(!drawerOpen)
                         .accessibilityAction(.escape) { closeDrawer() }
+                        .transition(.identity)
                         .zIndex(2)
                 }
             }
@@ -355,7 +359,8 @@ struct MainTabView: View {
                 .padding(.vertical, 14)
         }
         .foregroundStyle(.primary)
-        .accessibilityAddTraits(.isModal)
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(drawerOpen ? .isModal : [])
     }
 
     private func sectionTitle(_ text: String) -> some View {
@@ -397,9 +402,14 @@ struct MainTabView: View {
     }
 
     private func setDrawer(_ open: Bool) {
+        drawerMounted = true
         withAnimation(reduceMotion ? nil : FinFlowMotion.panel) {
             drawerOpen = open
             drawerOffset = nil
+        } completion: {
+            // Keep the panel alive for its closing animation, then remove its
+            // controls entirely. A newer opening gesture cancels the removal.
+            if !drawerOpen && drawerOffset == nil { drawerMounted = false }
         }
     }
 
@@ -596,11 +606,14 @@ struct PrivacyNoticeSheet: View {
             .safeAreaInset(edge: .bottom) {
                 Button(action: acknowledge) {
                     Text("Entendido, continuar a FinFlow")
-                        .frame(maxWidth: .infinity)
                         .fontWeight(.semibold)
+                        .foregroundStyle(FinFlowTheme.onAccent)
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                        .background(FinFlowTheme.accent, in: RoundedRectangle(cornerRadius: 16))
+                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(FinFlowTheme.accent)
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("privacy.continue")
                 .padding()
                 .frame(maxWidth: 660)
                 .background(.regularMaterial)

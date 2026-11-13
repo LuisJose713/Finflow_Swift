@@ -21,10 +21,27 @@ final class FinFlowUITests: XCTestCase {
         let password = app.secureTextFields["Contraseña"]
         password.tap(); password.typeText("PruebaSegura2026!")
         app.buttons["auth.submit"].tap()
-        let understood = app.buttons["Entendido, continuar a FinFlow"]
-        if understood.waitForExistence(timeout: 10) { understood.tap() }
-        XCTAssertTrue(app.buttons["navigation.openMenu"].waitForExistence(timeout: 15)
-                      || app.tabBars.firstMatch.waitForExistence(timeout: 5))
+        let understood = app.buttons["privacy.continue"]
+        XCTAssertTrue(understood.waitForExistence(timeout: 15))
+        tap(understood)
+        XCTAssertTrue(understood.waitForNonExistence(timeout: 8), "Privacy notice must close before entering FinFlow")
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["Cerrar menú"].exists, "A closed drawer must not expose its modal controls")
+    }
+
+    private func tap(_ element: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true AND hittable == true"), object: element)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 8), .completed,
+                       "Control must be visible and interactive: \(element)", file: file, line: line)
+        element.tap()
+    }
+
+    private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
+        for _ in 0..<8 {
+            if element.isHittable { return }
+            app.swipeUp()
+        }
+        XCTAssertTrue(element.isHittable, "Control must be reachable by scrolling: \(element)")
     }
 
     private func capture(_ app: XCUIApplication, _ name: String) {
@@ -36,11 +53,10 @@ final class FinFlowUITests: XCTestCase {
     private func open(_ route: String, in app: XCUIApplication) {
         let menu = app.buttons["navigation.openMenu"]
         if menu.exists {
-            menu.tap()
+            tap(menu)
             let destination = app.buttons["navigation.destination.\(route)"]
-            for _ in 0..<5 where !destination.isHittable { app.swipeUp() }
-            XCTAssertTrue(destination.waitForExistence(timeout: 5))
-            destination.tap()
+            reveal(destination, in: app)
+            tap(destination)
         } else {
             // iPad may use the adaptable sidebar. Open the native More tab.
             let more = app.buttons["Menú"].firstMatch
@@ -68,13 +84,14 @@ final class FinFlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["dashboard.balance"].waitForExistence(timeout: 10))
         capture(app, "03-dashboard")
         let picker = app.segmentedControls["dashboard.chartStyle"]
-        for _ in 0..<5 where !picker.isHittable { app.swipeUp() }
+        let circular = picker.buttons["Circular"]
+        reveal(circular, in: app)
         XCTAssertTrue(picker.exists)
         capture(app, "04-line-chart")
-        picker.buttons["Circular"].tap()
+        tap(circular)
         let expense = app.buttons["dashboard.slice.expense"]
-        for _ in 0..<3 where !expense.isHittable { app.swipeUp() }
-        expense.tap()
+        reveal(expense, in: app)
+        tap(expense)
         XCTAssertTrue(app.staticTexts["dashboard.donutAmount"].exists)
         capture(app, "05-circular-chart")
     }
@@ -96,7 +113,9 @@ final class FinFlowUITests: XCTestCase {
 
     func testCreateTransaction() {
         let app = launch(); signIn(app)
-        app.buttons["dashboard.addExpense"].tap()
+        let addExpense = app.buttons["dashboard.addExpense"]
+        reveal(addExpense, in: app)
+        tap(addExpense)
         let title = app.textFields["Título"]
         XCTAssertTrue(title.waitForExistence(timeout: 8))
         title.tap(); title.typeText("Prueba de movimiento iOS")

@@ -76,6 +76,11 @@ jobs:
           echo "FINFLOW_PHONE_UDID=$UDID" >> "$GITHUB_ENV"
           xcrun simctl boot "$UDID" || true
           xcrun simctl bootstatus "$UDID" -b
+          # Warm up the installed app before XCTest attaches to a freshly
+          # booted simulator; the first launch can otherwise time out in Xcode.
+          xcrun simctl install "$UDID" "$RUNNER_TEMP/FinFlowDerivedData/Build/Products/Debug-iphonesimulator/FinFlow.app"
+          SIMCTL_CHILD_FINFLOW_UI_TESTING=1 xcrun simctl launch "$UDID" com.finflow.ios
+          xcrun simctl terminate "$UDID" com.finflow.ios
           xcodebuild test -project FinFlow.xcodeproj -scheme FinFlow \
             -destination "platform=iOS Simulator,id=$UDID" \
             -derivedDataPath "$RUNNER_TEMP/FinFlowDerivedData" \
@@ -83,6 +88,7 @@ jobs:
             -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- \
             2>&1 | tee "$RUNNER_TEMP/finflow-test.log"
       - name: iPad layout and accessibility tests
+        if: ${{ !cancelled() }}
         shell: bash
         run: |
           set -euo pipefail
@@ -93,6 +99,9 @@ jobs:
           print(pads[0]["udid"] if pads else "")
           ')
           test -n "$UDID"
+          xcrun simctl shutdown "$FINFLOW_PHONE_UDID" || true
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
           xcodebuild test -project FinFlow.xcodeproj -scheme FinFlow \
             -destination "platform=iOS Simulator,id=$UDID" \
             -derivedDataPath "$RUNNER_TEMP/FinFlowDerivedData" \
@@ -103,6 +112,7 @@ jobs:
             -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- \
             2>&1 | tee "$RUNNER_TEMP/finflow-ipad-test.log"
       - name: Build Release for physical iPhone and iPad
+        if: ${{ !cancelled() }}
         run: |
           set -o pipefail
           xcodebuild -project FinFlow.xcodeproj -scheme FinFlow -configuration Release \
