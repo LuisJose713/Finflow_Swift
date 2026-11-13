@@ -4,6 +4,15 @@ import XCTest
 final class FinFlowUITests: XCTestCase {
     private func launch(failure: Bool = false, largeText: Bool = false, admin: Bool = false) -> XCUIApplication {
         continueAfterFailure = false
+        addUIInterruptionMonitor(withDescription: "iOS password saving") { alert in
+            // System language can differ from the app's requested locale.
+            // Keep synthetic credentials out of the simulator's password vault.
+            for title in ["Not Now", "Ahora no", "No guardar"] {
+                let decline = alert.buttons[title]
+                if decline.exists { decline.tap(); return true }
+            }
+            return false
+        }
         let app = XCUIApplication()
         app.launchEnvironment["FINFLOW_UI_TESTING"] = "1"
         if failure { app.launchEnvironment["FINFLOW_UI_FAILURE"] = "1" }
@@ -23,6 +32,9 @@ final class FinFlowUITests: XCTestCase {
         app.buttons["auth.submit"].tap()
         let understood = app.buttons["privacy.continue"]
         XCTAssertTrue(understood.waitForExistence(timeout: 15))
+        // Interruption monitors run when an interaction is attempted, rather
+        // than while waiting for an underlying control to become hittable.
+        app.tap()
         tap(understood)
         XCTAssertTrue(understood.waitForNonExistence(timeout: 8), "Privacy notice must close before entering FinFlow")
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 10))
