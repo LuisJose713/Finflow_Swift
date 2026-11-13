@@ -4,6 +4,7 @@ import SwiftUI
 /// verified again with the account password by the Spring Boot API.
 struct SecurityView: View {
     @EnvironmentObject private var session: SessionStore
+    @EnvironmentObject private var appLock: AppLockStore
     @State private var currentPassword = ""
     @State private var newPassword = ""
     @State private var confirmPassword = ""
@@ -24,6 +25,24 @@ struct SecurityView: View {
                 Section {
                     PresentationCard(cardID: "security.intro", eyebrow: "Protección de cuenta", title: "Tu información, bajo tu control.", detail: "Gestiona tu contraseña y las sesiones activas de tu cuenta.", symbol: "lock.shield")
                 }.listRowBackground(Color.clear).listRowInsets(EdgeInsets())
+                Section("Acceso al dispositivo") {
+                    Toggle(isOn: Binding(get: { appLock.isEnabled }, set: { enabled in
+                        Task { await appLock.setEnabled(enabled) }
+                    })) {
+                        Label("Proteger con \(appLock.methodName)", systemImage: appLock.symbol)
+                    }
+                    .disabled(!appLock.isAvailable || appLock.isAuthenticating)
+                    .accessibilityIdentifier("security.biometricToggle")
+                    Text(appLock.isAvailable
+                         ? "Se solicita al abrir FinFlow y cada vez que vuelves desde otra app. Si hace falta, iOS permite usar el código del dispositivo."
+                         : "Configura un código y Face ID o Touch ID en los ajustes del dispositivo para proteger tu sesión.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    if appLock.isEnabled && appLock.isAvailable {
+                        Button("Bloquear FinFlow ahora") { appLock.lockNow() }
+                            .accessibilityIdentifier("security.lockNow")
+                    }
+                    if let message = appLock.error { ErrorBanner(message: message) }
+                }
                 Section("Cambiar contraseña") {
                     SecureField("Contraseña actual", text: $currentPassword)
                         .textContentType(.password)
@@ -40,8 +59,9 @@ struct SecurityView: View {
                             Spacer()
                         }
                     }
-                    .disabled(changing || revoking || currentPassword.isEmpty ||
-                              newPassword.count < 12 || confirmPassword != newPassword)
+                    .disabled(changing || revoking || deleting || currentPassword.isEmpty ||
+                              newPassword.count < 12 || newPassword.utf8.count > 72 ||
+                              currentPassword.utf8.count > 72 || confirmPassword != newPassword)
                 }
                 Section("Cerrar todas las sesiones") {
                     SecureField("Confirma tu contraseña actual", text: $revokePassword)
@@ -49,7 +69,7 @@ struct SecurityView: View {
                     Button("Cerrar sesiones en todos los dispositivos", role: .destructive) {
                         showConfirmRevocation = true
                     }
-                    .disabled(changing || revoking || revokePassword.isEmpty)
+                    .disabled(changing || revoking || deleting || revokePassword.isEmpty || revokePassword.utf8.count > 72)
                     Text("Esta acción te desconectará también de este iPhone. Para volver a entrar deberás iniciar sesión.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
@@ -106,7 +126,7 @@ struct SecurityView: View {
 
     private func deleteAccount() async {
         guard !deletePassword.isEmpty, deletePassword.utf8.count <= 72,
-              deletePhrase == "ELIMINAR", !deleting else { return }
+              deletePhrase == "ELIMINAR", !deleting, !changing, !revoking else { return }
         deleting = true
         defer { deleting = false }
         error = nil
@@ -124,7 +144,8 @@ struct SecurityView: View {
 
     private func changePassword() async {
         guard newPassword.count >= 12, newPassword == confirmPassword,
-              !currentPassword.isEmpty else {
+              newPassword.utf8.count <= 72, currentPassword.utf8.count <= 72,
+              !currentPassword.isEmpty, !changing, !revoking, !deleting else {
             error = "La contraseña debe tener al menos 12 caracteres y coincidir."
             return
         }
@@ -146,7 +167,8 @@ struct SecurityView: View {
     }
 
     private func revokeSessions() async {
-        guard !revokePassword.isEmpty else { return }
+        guard !revokePassword.isEmpty, revokePassword.utf8.count <= 72,
+              !changing, !revoking, !deleting else { return }
         revoking = true
         defer { revoking = false }
         error = nil

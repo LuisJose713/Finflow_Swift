@@ -25,7 +25,7 @@ struct GoalsView: View {
                 }.refreshable { await load() }
             }
             .navigationTitle("Metas financieras")
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { editingGoal = nil; showingForm = true } label: { Image(systemName: "plus.circle.fill") } } }
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { editingGoal = nil; showingForm = true } label: { Image(systemName: "plus.circle.fill") }.accessibilityLabel("Nueva meta").accessibilityIdentifier("goals.add") } }
             .task { await load() }
             .sheet(isPresented: $showingForm, onDismiss: { Task { await load() } }) { GoalFormView(goal: editingGoal) }
             .sheet(item: $historyGoal) { goal in GoalHistoryView(goal: goal) }
@@ -96,7 +96,9 @@ struct GoalFormView: View {
                 Section("Objetivo") { TextField("Nombre de la meta", text: $name); COPAmountField("Monto objetivo (COP)", text: $target); if goal == nil { COPAmountField("Ahorro inicial (COP)", text: $current) } else { LabeledContent("Ahorro acumulado", value: CurrencyFormatter.format(goal?.currentAmount ?? 0)) }; DatePicker("Fecha objetivo", selection: $deadline, displayedComponents: .date); TextField("Descripción (opcional)", text: $description, axis: .vertical) }
                 if let error { Text(error).foregroundStyle(.red) }
                 Button { Task { await save() } } label: { HStack { Spacer(); if isSaving { ProgressView() } else { Text("Guardar meta") }; Spacer() } }.disabled(isSaving)
-            }.navigationTitle(goal == nil ? "Nueva meta" : "Editar meta").navigationBarTitleDisplayMode(.inline).toolbar { ToolbarItem(placement: .topBarLeading) { Button("Cancelar") { dismiss() } } }
+            }.navigationTitle(goal == nil ? "Nueva meta" : "Editar meta").navigationBarTitleDisplayMode(.inline).toolbar { ToolbarItem(placement: .topBarLeading) { Button("Cancelar") { dismiss() }.disabled(isSaving) } }
+                .interactiveDismissDisabled(isSaving)
+                .modifier(FinFlowKeyboardDismiss())
         }.onAppear { if let goal { name = goal.name; target = String(goal.targetAmount); current = String(goal.currentAmount); deadline = DateFormatters.parse(goal.deadline) ?? .now; description = goal.description ?? "" } }
     }
     private func save() async {

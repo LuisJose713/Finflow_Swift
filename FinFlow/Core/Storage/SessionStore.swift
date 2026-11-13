@@ -67,7 +67,7 @@ final class SessionStore: ObservableObject {
         do {
             let response: AuthResponse = try await APIClient.shared.request("/auth/login", method: "POST", body: LoginRequest(email: email, password: password))
             guard authOperation == operation else { return }
-            persist(response)
+            try persist(response)
         } catch {
             if authOperation == operation { errorMessage = error.localizedDescription }
         }
@@ -88,17 +88,20 @@ final class SessionStore: ObservableObject {
             let response: AuthResponse = try await APIClient.shared.request(
                 "/auth/register", method: "POST", body: body)
             guard authOperation == operation else { return }
-            persist(response)
+            try persist(response)
         } catch {
             if authOperation == operation { errorMessage = error.localizedDescription }
         }
     }
-    private func persist(_ response: AuthResponse) {
-        TokenStore.shared.saveCredentials(response)
+    private func persist(_ response: AuthResponse) throws {
+        guard TokenStore.shared.saveCredentials(response) else {
+            throw APIError.server("No pudimos guardar tu sesión de forma segura. Desbloquea el dispositivo e inténtalo de nuevo.")
+        }
         user = response.user; isAuthenticated = true
     }
     func logout() {
         let refresh = TokenStore.shared.read("refreshToken")
+        if let ownerID = user?.id { OfflineTransactionStore.shared.clear(userID: ownerID) }
         authOperation = UUID()
         TokenStore.shared.deleteAll()
         user = nil

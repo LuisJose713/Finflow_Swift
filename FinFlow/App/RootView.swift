@@ -2,6 +2,8 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject private var session: SessionStore
+    @EnvironmentObject private var appLock: AppLockStore
+    @EnvironmentObject private var navigation: AppNavigationStore
     @State private var checkingSession = true
     @State private var showPrivacyNotice = false
     @State private var requirePrivacyConsent = false
@@ -20,7 +22,11 @@ struct RootView: View {
                     ProgressView("Preparando FinFlow…")
                 }
             } else if session.isAuthenticated {
-                MainTabView()
+                if appLock.isLocked {
+                    AppLockView()
+                } else {
+                    MainTabView()
+                    .id(session.user?.id)
                     .sheet(isPresented: $showPrivacyNotice) {
                         PrivacyNoticeSheet(policy: privacyPolicy) {
                             acknowledgeNotice()
@@ -37,6 +43,7 @@ struct RootView: View {
                         )
                         .interactiveDismissDisabled()
                     }
+                }
             } else {
                 AuthView()
             }
@@ -46,9 +53,12 @@ struct RootView: View {
             checkingSession = false
         }
         .task(id: session.user?.id) {
+            appLock.prepare(ownerID: session.user?.id)
             if let currentUser = session.user, session.isAuthenticated {
+                await appLock.unlock(automatically: true)
                 await refreshPrivacy(userID: currentUser.id)
             } else {
+                navigation.clear()
                 showPrivacyNotice = false
                 requirePrivacyConsent = false
                 privacyPolicy = nil
@@ -160,6 +170,7 @@ struct RootView: View {
 /// navigation drawer. iPad keeps Apple's adaptive sidebar.
 struct MainTabView: View {
     @EnvironmentObject private var session: SessionStore
+    @EnvironmentObject private var navigation: AppNavigationStore
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var selectedTab: MainTab = .home
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -217,6 +228,8 @@ struct MainTabView: View {
                 )
             }
             .onChange(of: sizeClass) { _, _ in setDrawer(false) }
+            .onChange(of: navigation.pendingDestination) { _, _ in openNotificationDestination() }
+            .onAppear { openNotificationDestination() }
             .overlay(alignment: .topLeading) {
                 if sizeClass == .compact && !drawerOpen && drawerOffset == nil {
                     Button {
@@ -229,6 +242,7 @@ struct MainTabView: View {
                     }
                     .foregroundStyle(FinFlowTheme.accent)
                     .accessibilityLabel("Abrir menú FinFlow")
+                    .accessibilityIdentifier("navigation.openMenu")
                     .padding(.leading, 12)
                     .padding(.top, 2)
                     .zIndex(3)
@@ -377,6 +391,7 @@ struct MainTabView: View {
             detail = destination
         } label: { menuRow(text, icon: icon) }
         .buttonStyle(FinFlowPressStyle())
+        .accessibilityIdentifier("navigation.destination.\(destination.rawValue)")
     }
 
     private func setDrawer(_ open: Bool) {
@@ -387,6 +402,13 @@ struct MainTabView: View {
     }
 
     private func closeDrawer() { setDrawer(false) }
+
+    private func openNotificationDestination() {
+        guard let destination = navigation.takeDestination() else { return }
+        detail = nil
+        closeDrawer()
+        selectedTab = destination == .transactions ? .transactions : .home
+    }
 
     @ViewBuilder private func detailView(_ destination: DrawerDestination) -> some View {
         switch destination {

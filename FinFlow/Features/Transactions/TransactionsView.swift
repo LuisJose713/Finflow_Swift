@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct TransactionsView: View {
+    @EnvironmentObject private var session: SessionStore
     @State private var transactions: [FinanceTransaction] = []
     @State private var categories: [FinanceCategory] = []
     @State private var accounts: [FinancialAccount] = []
@@ -11,6 +12,7 @@ struct TransactionsView: View {
     @State private var selectedCategory = 0
     @State private var error: String?
     @State private var isLoading = true
+    @State private var requestInFlight = false
     @State private var showingCreate = false
     @State private var editingTransaction: FinanceTransaction?
     @State private var deletingTransaction: FinanceTransaction?
@@ -28,45 +30,69 @@ struct TransactionsView: View {
     var body: some View {
         NavigationStack {
             ScreenBackground {
-                VStack(spacing: 12) {
+                List {
+                    Section {
                         PresentationCard(cardID: "transactions.intro", eyebrow: "Movimientos", title: "Cada movimiento cuenta.", detail: "Una visión clara de tus ingresos y gastos.", symbol: "arrow.left.arrow.right")
-                    VStack(spacing: 10) {
-                        HStack { Image(systemName: "magnifyingglass").foregroundStyle(FinFlowTheme.secondaryText); TextField("Buscar movimiento", text: $search) }
-                            .padding(12).background(FinFlowTheme.surface, in: RoundedRectangle(cornerRadius: 12))
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    Section {
                         HStack {
-                            Picker("Tipo", selection: $typeFilter) { Text("Todos").tag("all"); Text("Ingresos").tag("income"); Text("Gastos").tag("expense") }.pickerStyle(.segmented)
+                            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                            TextField("Buscar movimiento", text: $search)
+                                .onChange(of: search) { _, value in search = String(value.prefix(120)) }
                         }
-                        HStack {
-                            Picker("Mes", selection: $selectedMonth) { Text("Todos los meses").tag(0); ForEach(1...12, id: \.self) { Text(Calendar.current.monthSymbols[$0 - 1]).tag($0) } }.tint(FinFlowTheme.accent)
-                            Picker("Año", selection: $selectedYear) { Text("Todos los años").tag(0); ForEach(yearOptions, id: \.self) { Text(String($0)).tag($0) } }.tint(FinFlowTheme.accent)
-                        }.font(.caption)
+                        Picker("Tipo", selection: $typeFilter) {
+                            Text("Todos").tag("all"); Text("Ingresos").tag("income"); Text("Gastos").tag("expense")
+                        }.pickerStyle(.segmented)
+                        Picker("Mes", selection: $selectedMonth) {
+                            Text("Todos los meses").tag(0)
+                            ForEach(1...12, id: \.self) { Text(Calendar.current.monthSymbols[$0 - 1]).tag($0) }
+                        }
+                        Picker("Año", selection: $selectedYear) {
+                            Text("Todos los años").tag(0)
+                            ForEach(yearOptions, id: \.self) { Text(String($0)).tag($0) }
+                        }
                         if !categories.isEmpty {
                             Picker("Categoría", selection: $selectedCategory) {
                                 Text("Todas las categorías").tag(0)
                                 ForEach(categories) { Text($0.name).tag($0.id) }
-                            }.tint(FinFlowTheme.accent)
+                            }
                         }
-                    }.padding(.horizontal, 16)
-                    if let error { ErrorBanner(message: error).padding(.horizontal, 16) }
-                    if isExporting { ProgressView("Preparando archivo…") }
-                    if isLoading { LoadingView() }
-                    else if filtered.isEmpty { EmptyState(icon: "arrow.left.arrow.right", title: "Sin movimientos", message: "Prueba otros filtros o agrega tu primera transacción.") }
-                    else {
-                        List {
-                            ForEach(filtered) { tx in TransactionRow(transaction: tx).listRowBackground(FinFlowTheme.surface).swipeActions {
-                                Button("Editar", systemImage: "pencil") { editingTransaction = tx }.tint(FinFlowTheme.accent)
-                                Button(role: .destructive) { deletingTransaction = tx } label: { Label("Eliminar", systemImage: "trash") }
-                            } }
-                        }.scrollContentBackground(.hidden).listStyle(.plain)
+                    }
+                    .listRowBackground(FinFlowTheme.surface)
+                    if let error { ErrorBanner(message: error).listRowBackground(Color.clear) }
+                    if isExporting { ProgressView("Preparando archivo…").listRowBackground(Color.clear) }
+                    if isLoading {
+                        ProgressView("Cargando movimientos…").frame(maxWidth: .infinity).padding()
+                            .listRowBackground(Color.clear)
+                    } else if filtered.isEmpty {
+                        EmptyState(icon: "arrow.left.arrow.right", title: "Sin movimientos", message: "Prueba otros filtros o agrega tu primera transacción.")
+                            .listRowBackground(Color.clear)
+                    } else {
+                        ForEach(filtered) { tx in
+                            TransactionRow(transaction: tx)
+                                .listRowBackground(FinFlowTheme.surface)
+                                .swipeActions {
+                                    Button("Editar", systemImage: "pencil") { editingTransaction = tx }.tint(FinFlowTheme.accent)
+                                    Button(role: .destructive) { deletingTransaction = tx } label: { Label("Eliminar", systemImage: "trash") }
+                                }
+                        }
                     }
                 }
+                .listStyle(.insetGrouped)
+                .scrollContentBackground(.hidden)
+                .scrollDismissesKeyboard(.interactively)
             }
             .navigationTitle("Movimientos")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { Menu { Button("Exportar PDF", systemImage: "doc.richtext") { Task { await export("pdf") } }; Button("Exportar Excel", systemImage: "tablecells") { Task { await export("xlsx") } }; Button("Exportar CSV", systemImage: "tablecells.badge.ellipsis") { Task { await export("csv") } } } label: { Image(systemName: "square.and.arrow.up") }.disabled(isExporting || showingShare) }
-                ToolbarItem(placement: .topBarTrailing) { Button { showingCreate = true } label: { Image(systemName: "plus.circle.fill") } }
+                ToolbarItem(placement: .topBarTrailing) { Button { showingCreate = true } label: { Image(systemName: "plus.circle.fill") }.accessibilityLabel("Nuevo movimiento").accessibilityIdentifier("transactions.add") }
             }
             .task { await load() }
+            .onReceive(NotificationCenter.default.publisher(for: .finflowFinanceChanged).receive(on: RunLoop.main)) { _ in
+                Task { await load() }
+            }
             .refreshable { await load() }
             .sheet(isPresented: $showingCreate, onDismiss: { Task { await load() } }) { CreateTransactionView(categories: categories, accounts: accounts) }
             .sheet(item: $editingTransaction, onDismiss: { Task { await load() } }) { transaction in
@@ -93,17 +119,21 @@ struct TransactionsView: View {
         }
     }
     private var yearOptions: [Int] { Array(Set(transactions.map { Calendar.current.component(.year, from: $0.parsedDate) })).sorted(by: >) }
-    private func load() async {
+    @MainActor private func load() async {
+        guard !requestInFlight, let userID = session.user?.id else { return }
+        requestInFlight = true
         isLoading = true
-        defer { isLoading = false }
-        let userID = Int(TokenStore.shared.read("userId") ?? "0") ?? 0
+        defer { isLoading = false; requestInFlight = false }
         do {
             async let remote: [FinanceTransaction] = APIClient.shared.request("/transactions")
             async let cats: [FinanceCategory] = APIClient.shared.request("/categories")
             async let wallets: [FinancialAccount] = APIClient.shared.request("/accounts")
             let server = try await remote
-            categories = try await cats
-            accounts = (try? await wallets) ?? []
+            let loadedCategories = try await cats
+            let loadedAccounts = (try? await wallets) ?? []
+            guard !Task.isCancelled, session.user?.id == userID else { return }
+            categories = loadedCategories
+            accounts = loadedAccounts
             transactions = server
             // Preserve old pending optimistic entries for explicit manual review;
             // never auto-post them after an ambiguous timeout.
@@ -114,6 +144,7 @@ struct TransactionsView: View {
                 ? "Hay operaciones pendientes de una versión anterior. Por seguridad no se reenviarán automáticamente: comprueba los registros antes de introducirlos otra vez."
                 : nil
         } catch {
+            guard !Task.isCancelled, session.user?.id == userID else { return }
             transactions = OfflineTransactionStore.shared.cachedTransactions(userID: userID)
                 .filter { $0.id > 0 }
             self.error = transactions.isEmpty
@@ -219,6 +250,7 @@ struct CreateTransactionView: View {
             .navigationTitle(editing == nil ? "Nuevo movimiento" : "Editar movimiento").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarLeading) { Button("Cancelar") { dismiss() }.disabled(isSaving) } }
             .interactiveDismissDisabled(isSaving)
+            .modifier(FinFlowKeyboardDismiss())
             .onAppear {
                 if let editing {
                     description = editing.description

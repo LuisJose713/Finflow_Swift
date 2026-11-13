@@ -3,6 +3,8 @@ import UIKit
 
 struct AuthView: View {
     @EnvironmentObject private var session: SessionStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @FocusState private var emailFocused: Bool
     @State private var isRegistering = false
     @State private var name = ""
     @State private var email = ""
@@ -25,6 +27,7 @@ struct AuthView: View {
                     VStack(spacing: 15) {
                         if isRegistering { field("Nombre completo", text: $name, icon: "person") }
                         field("Correo electrónico", text: $email, icon: "envelope", contentType: .emailAddress)
+                            .accessibilityIdentifier("auth.email")
                         PasswordInput("Contraseña", text: $password, isNew: isRegistering)
                         if isRegistering { PasswordInput("Confirmar contraseña", text: $confirmPassword, isNew: true) }
                         if isRegistering {
@@ -59,12 +62,19 @@ struct AuthView: View {
                         }
                         if let error = session.errorMessage { ErrorBanner(message: error) }
                         PrimaryButton(title: isRegistering ? "Crear cuenta" : "Iniciar sesión", isLoading: session.isLoading) { Task { await submit() } }
-                        Button(isRegistering ? "Ya tengo cuenta · Iniciar sesión" : "¿No tienes cuenta? Regístrate") { withAnimation { isRegistering.toggle(); session.errorMessage = nil } }.font(.subheadline).foregroundStyle(FinFlowTheme.accent)
+                            .accessibilityIdentifier("auth.submit")
+                        Button(isRegistering ? "Ya tengo cuenta · Iniciar sesión" : "¿No tienes cuenta? Regístrate") {
+                            withAnimation(reduceMotion ? nil : FinFlowMotion.reveal) {
+                                isRegistering.toggle(); session.errorMessage = nil
+                            }
+                        }.font(.subheadline).foregroundStyle(FinFlowTheme.accent)
+                            .frame(minHeight: 44).disabled(session.isLoading)
                     }
                     .padding(20).background(FinFlowTheme.surface, in: RoundedRectangle(cornerRadius: 24))
                     Text("Seguro · Simple · Para ti").font(.caption).foregroundStyle(FinFlowTheme.secondaryText)
                 }.padding(22).frame(maxWidth: 480).frame(maxWidth: .infinity)
             }
+            .scrollDismissesKeyboard(.interactively)
         }
         .task { await loadPrivacyPolicy() }
         .sheet(isPresented: $showingPrivacyReview) {
@@ -103,6 +113,9 @@ struct AuthView: View {
             .padding(15).background(FinFlowTheme.elevated, in: RoundedRectangle(cornerRadius: 13))
     }
     private func submit() async {
+        guard !session.isLoading else { return }
+        email = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard password.utf8.count <= 72 else { session.errorMessage = "La contraseña supera el máximo de 72 bytes. Los acentos y emojis pueden ocupar más de un byte."; return }
         guard email.contains("@"), password.count >= 8 else { session.errorMessage = "Ingresa un correo válido y una contraseña de al menos 8 caracteres."; return }
         if isRegistering {

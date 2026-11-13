@@ -21,9 +21,17 @@ final class APIClient: @unchecked Sendable {
         config.timeoutIntervalForRequest = 20
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         config.urlCache = nil
+        config.httpCookieStorage = nil
+        config.httpShouldSetCookies = false
         config.timeoutIntervalForResource = 60
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["FINFLOW_UI_TESTING"] == "1" {
+            config.protocolClasses = [PreviewAPIProtocol.self]
+        }
+        #endif
         session = URLSession(configuration: config)
     }
+    init(session: URLSession) { self.session = session }
     // Fixed HTTPS API origin; arbitrary hosts must never receive bearer credentials.
     let baseURL = "https://finflow-backend-production.up.railway.app"
 
@@ -47,7 +55,11 @@ final class APIClient: @unchecked Sendable {
             let message = (serverMessage?["message"] as? String) ?? (serverMessage?["error"] as? String)
             throw APIError.server(message.map { String($0.prefix(280)) } ?? "Error HTTP \(http.statusCode)")
         }
-        do { return try JSONDecoder().decode(T.self, from: data) }
+        do {
+            let decoded = try JSONDecoder().decode(T.self, from: data)
+            notifyFinancialChange(path: path, method: method)
+            return decoded
+        }
         catch { throw APIError.decoding }
     }
 
@@ -70,6 +82,12 @@ final class APIClient: @unchecked Sendable {
             let message = (payload?["message"] as? String) ?? (payload?["error"] as? String)
             throw APIError.server(message.map { String($0.prefix(280)) } ?? "Error HTTP \(http.statusCode)")
         }
+        notifyFinancialChange(path: path, method: method)
+    }
+
+    private func notifyFinancialChange(path: String, method: String) {
+        guard method != "GET", ["/transactions", "/accounts", "/goals", "/planned-expenses", "/recurring", "/budgets", "/categories"].contains(where: { path == $0 || path.hasPrefix($0 + "/") }) else { return }
+        NotificationCenter.default.post(name: .finflowFinanceChanged, object: nil)
     }
 
     private func sendWithRenewal(_ request: URLRequest) async throws -> (Data, URLResponse) {
@@ -107,6 +125,7 @@ final class APIClient: @unchecked Sendable {
     /// The backend resolves ownership exclusively from the verified bearer JWT.
     private func applyHeaders(to request: inout URLRequest, hasJSONBody: Bool) {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("ios", forHTTPHeaderField: "X-Client-Type")
         if hasJSONBody { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
         // Public login/registration must not carry a stale bearer token.
         // A previous authenticated session must not be revoked by a failed login.
@@ -122,6 +141,7 @@ final class APIClient: @unchecked Sendable {
         guard let url = components.url else { throw APIError.invalidURL }
         var request = URLRequest(url: url)
         applyHeaders(to: &request, hasJSONBody: false)
+        request.setValue("*/*", forHTTPHeaderField: "Accept")
         let (data, response) = try await sendWithRenewal(request)
         guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
         if http.statusCode == 401 {
@@ -131,6 +151,10 @@ final class APIClient: @unchecked Sendable {
         guard (200..<300).contains(http.statusCode) else { throw APIError.server("No fue posible exportar el archivo.") }
         return data
     }
+}
+
+extension Notification.Name {
+    static let finflowFinanceChanged = Notification.Name("finflow.financeChanged")
 }
 
 private struct AnyEncodable: Encodable {

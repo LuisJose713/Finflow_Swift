@@ -20,6 +20,11 @@ final class OfflineTransactionStore: @unchecked Sendable {
     private func cacheKey(userID: Int) -> String { "finflow.offline.transactions.\(userID)" }
     private func queueKey(userID: Int) -> String { "finflow.offline.queue.\(userID)" }
 
+    func clear(userID: Int) {
+        defaults.removeObject(forKey: cacheKey(userID: userID))
+        defaults.removeObject(forKey: queueKey(userID: userID))
+    }
+
     func cachedTransactions(userID: Int) -> [FinanceTransaction] {
         readEncryptedOrLegacy([FinanceTransaction].self, at: cacheKey(userID: userID)) ?? []
     }

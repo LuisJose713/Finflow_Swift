@@ -82,6 +82,9 @@ struct DashboardView: View {
                 }
             }
             .task { await load() }
+            .onReceive(NotificationCenter.default.publisher(for: .finflowFinanceChanged).receive(on: RunLoop.main)) { _ in
+                Task { await load() }
+            }
             .sheet(item: $draft, onDismiss: { Task { await load() } }) { kind in
                 CreateTransactionView(categories: entryCategories, accounts: entryAccounts,
                                       initialType: kind.rawValue, accountNotice: entryAccountNotice)
@@ -205,37 +208,7 @@ struct DashboardView: View {
                     .font(.subheadline).foregroundStyle(FinFlowTheme.secondaryText)
             }
         } else {
-            if !stats.monthlyData.isEmpty {
-                SectionCard(title: "Evolución mensual", subtitle: "Ingresos y gastos registrados en COP") {
-                    HStack(spacing: 16) {
-                        Label("Ingresos", systemImage: "circle.fill").font(.caption).foregroundStyle(FinFlowTheme.mint)
-                        Label("Gastos", systemImage: "circle.fill").font(.caption).foregroundStyle(FinFlowTheme.danger)
-                    }
-                    Chart {
-                        ForEach(stats.monthlyData) { month in
-                            LineMark(x: .value("Mes", month.month), y: .value("Ingresos", month.income), series: .value("Serie", "Ingresos"))
-                                .foregroundStyle(FinFlowTheme.mint).symbol(Circle())
-                            LineMark(x: .value("Mes", month.month), y: .value("Gastos", month.expenses), series: .value("Serie", "Gastos"))
-                                .foregroundStyle(FinFlowTheme.danger).symbol(.square)
-                        }
-                    }
-                    .chartLegend(.hidden).frame(height: 190)
-                    .accessibilityLabel("Evolución mensual de ingresos y gastos en pesos colombianos")
-                }
-            }
-            if !stats.categoryData.isEmpty {
-                SectionCard(title: "Gastos por categoría", subtitle: "Operaciones completadas en COP") {
-                    Chart {
-                        ForEach(Array(stats.categoryData.sorted { $0.amount > $1.amount }.prefix(6))) { category in
-                            BarMark(x: .value("Importe", category.amount), y: .value("Categoría", category.category))
-                                .foregroundStyle(FinFlowTheme.accent)
-                        }
-                    }
-                    .chartLegend(.hidden)
-                    .frame(height: CGFloat(min(stats.categoryData.count, 6) * 44 + 35))
-                    .accessibilityLabel("Las seis categorías con más gastos")
-                }
-            }
+            FinancialSummaryCharts(stats: stats)
         }
     }
 
@@ -310,7 +283,7 @@ struct DashboardView: View {
     }
 
     @MainActor private func load() async {
-        guard !requestInFlight else { return }
+        guard !requestInFlight, let owner = session.user?.id else { return }
         requestInFlight = true
         isLoading = true
         defer { isLoading = false; requestInFlight = false }
@@ -320,11 +293,13 @@ struct DashboardView: View {
             // Keep the previous snapshot until both requests succeed. A partial
             // refresh must not pair new totals with stale movements.
             let snapshot = try await (loadedStats, loadedTransactions)
+            guard !Task.isCancelled, session.user?.id == owner else { return }
             stats = snapshot.0
             transactions = snapshot.1
             lastUpdated = .now
             error = nil
         } catch {
+            guard !Task.isCancelled, session.user?.id == owner else { return }
             self.error = lastUpdated == nil
                 ? "No pudimos consultar tus finanzas. Revisa tu conexión e inténtalo de nuevo."
                 : "No pudimos actualizar tus finanzas. Se conserva el último resumen cargado."

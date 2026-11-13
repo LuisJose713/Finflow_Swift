@@ -3,7 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var session: SessionStore
     @State private var showingLogout = false
-    @AppStorage("finflow.appearance") private var appearance = "system"
+    @AppStorage("finflow.appearance") private var appearance = "dark"
     @AppStorage("finflow.dailyRemindersEnabled") private var dailyRemindersEnabled = true
     var body: some View {
             ScreenBackground {

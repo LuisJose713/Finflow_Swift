@@ -4,9 +4,27 @@ import UIKit
 
 @main
 struct FinFlowApp: App {
+    @UIApplicationDelegateAdaptor(FinFlowNotificationDelegate.self) private var notificationDelegate
     @StateObject private var session = SessionStore()
+    @StateObject private var appLock = AppLockStore()
+    @StateObject private var navigation = AppNavigationStore.shared
     @StateObject private var preferences = UiPreferencesStore()
-    @AppStorage("finflow.appearance") private var appearance = "system"
+    @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("finflow.appearance") private var appearance = "dark"
+
+    init() {
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["FINFLOW_UI_TESTING"] == "1" {
+            // XCTest launches a clean synthetic session, never a real account.
+            TokenStore.shared.deleteAll()
+            if let bundleID = Bundle.main.bundleIdentifier {
+                UserDefaults.standard.removePersistentDomain(forName: bundleID)
+            }
+            UserDefaults.standard.set(false, forKey: FinFlowDailyReminders.preferenceKey)
+            UserDefaults.standard.set("dark", forKey: "finflow.appearance")
+        }
+        #endif
+    }
 
     private var preferredScheme: ColorScheme? {
         switch appearance {
@@ -20,7 +38,17 @@ struct FinFlowApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(session)
+                .environmentObject(appLock)
+                .environmentObject(navigation)
                 .environmentObject(preferences)
+                .onChange(of: scenePhase) { _, phase in
+                    switch phase {
+                    case .background: appLock.enteredBackground()
+                    case .inactive: appLock.becameInactive()
+                    case .active: Task { await appLock.becameActive() }
+                    @unknown default: appLock.enteredBackground()
+                    }
+                }
                 .task(id: session.user?.id) {
                     await preferences.load(userID: session.user?.id)
                     await FinFlowDailyReminders.sync(authenticated: session.isAuthenticated)
@@ -125,6 +153,7 @@ enum FinFlowDailyReminders {
         let center = UNUserNotificationCenter.current()
         guard authenticated else {
             center.removePendingNotificationRequests(withIdentifiers: ids)
+            center.removeDeliveredNotifications(withIdentifiers: ids)
             return
         }
         // Default to opt-in through the system authorization prompt on first login.

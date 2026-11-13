@@ -13,15 +13,18 @@ final class TokenStore: @unchecked Sendable {
     private let lock = NSRecursiveLock()
     private init() {}
 
-    func save(_ value: String, account: String) {
+    @discardableResult
+    func save(_ value: String, account: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }
         let data = Data(value.utf8)
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
-        SecItemDelete(query as CFDictionary)
-        var insert = query; insert[kSecValueData as String] = data
-        insert[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-        SecItemAdd(insert as CFDictionary, nil)
+        let attributes: [String: Any] = [kSecValueData as String: data,
+                                       kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly]
+        let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if status == errSecSuccess { return true }
+        guard status == errSecItemNotFound else { return false }
+        return SecItemAdd(query.merging(attributes) { _, new in new } as CFDictionary, nil) == errSecSuccess
     }
     func read(_ account: String) -> String? {
         lock.lock()
@@ -31,24 +34,26 @@ final class TokenStore: @unchecked Sendable {
         guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess, let data = result as? Data else { return nil }
         return String(data: data, encoding: .utf8)
     }
-    func saveCredentials(_ response: AuthResponse) {
+    @discardableResult
+    func saveCredentials(_ response: AuthResponse) -> Bool {
         lock.lock(); defer { lock.unlock() }
-        writeCredentials(response)
+        return writeCredentials(response)
     }
 
     func replaceCredentials(_ response: AuthResponse, ifTokenMatches expected: String?) -> Bool {
         lock.lock(); defer { lock.unlock() }
         guard read("token") == expected else { return false }
-        writeCredentials(response)
-        return true
+        return writeCredentials(response)
     }
 
-    private func writeCredentials(_ response: AuthResponse) {
-        save(response.token, account: "token")
-        save(response.refreshToken ?? "", account: "refreshToken")
-        save(String(response.user.id), account: "userId")
-        save(response.user.name, account: "userName")
-        save(response.user.email, account: "email")
+    private func writeCredentials(_ response: AuthResponse) -> Bool {
+        let fields = [("refreshToken", response.refreshToken ?? ""),
+                      ("userId", String(response.user.id)), ("userName", response.user.name),
+                      ("email", response.user.email), ("token", response.token)]
+        for (account, value) in fields {
+            guard save(value, account: account) else { deleteAll(); return false }
+        }
+        return true
     }
 
     /// Atomic compare-and-delete: never remove a replacement token when an

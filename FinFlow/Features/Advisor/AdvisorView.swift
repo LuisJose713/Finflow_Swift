@@ -2,6 +2,7 @@ import SwiftUI
 
 /// FinFlow AI uses the native full-height chat layout and the existing API.
 struct AdvisorView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var messages: [ChatMessage] = []
     @State private var input = ""
     @State private var isSending = false
@@ -72,7 +73,7 @@ struct AdvisorView: View {
                 .scrollDismissesKeyboard(.interactively)
                 .onChange(of: messages.count) { _, _ in
                     if let last = messages.last {
-                        withAnimation(.easeOut(duration: 0.18)) {
+                        withAnimation(reduceMotion ? nil : FinFlowMotion.reveal) {
                             proxy.scrollTo(last.id, anchor: .bottom)
                         }
                     }
@@ -84,6 +85,7 @@ struct AdvisorView: View {
                     TextField("Escribe tu mensaje…", text: $input, axis: .vertical)
                         .lineLimit(1...5)
                         .focused($inputFocused)
+                        .onChange(of: input) { _, value in input = String(value.prefix(2000)) }
                         .padding(.horizontal, 14)
                         .padding(.vertical, 12)
                         .background(FinFlowTheme.elevated,
