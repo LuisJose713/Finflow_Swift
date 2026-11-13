@@ -7,6 +7,7 @@ struct PlannedExpensesView: View {
     @State private var editing: PlannedExpense?
     @State private var showingForm = false
     @State private var executeTarget: PlannedExpense?
+    @State private var deleteTarget: PlannedExpense?
     @State private var isLoading = true
     @State private var error: String?
     @State private var isWorking = false
@@ -53,6 +54,14 @@ struct PlannedExpensesView: View {
                 Button("Ejecutar gasto") { if let target = executeTarget { Task { await execute(target) } } }
                 Button("Cancelar", role: .cancel) { executeTarget = nil }
             }
+            .confirmationDialog("¿Eliminar este gasto planificado?", isPresented: Binding(
+                get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } }
+            ), titleVisibility: .visible) {
+                Button("Eliminar gasto planificado", role: .destructive) {
+                    if let target = deleteTarget { Task { await delete(target); deleteTarget = nil } }
+                }
+                Button("Cancelar", role: .cancel) { deleteTarget = nil }
+            }
             .overlay { if isWorking { ProgressView().padding(18).background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14)) } }
     }
 
@@ -81,7 +90,7 @@ struct PlannedExpensesView: View {
                 Spacer()
                 Menu {
                     if expense.status == "pending" { Button("Cancelar gasto", role: .destructive) { Task { await cancel(expense) } } }
-                    Button("Eliminar", role: .destructive) { Task { await delete(expense) } }
+                    Button("Eliminar", role: .destructive) { deleteTarget = expense }
                 } label: { Image(systemName: "ellipsis.circle") }
             }
         }

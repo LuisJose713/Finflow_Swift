@@ -6,6 +6,7 @@ import CryptoKit
 /// lives in the Keychain with this-device-only accessibility.
 enum SecureCache {
     private static let keyName = "offline-cache-key"
+    private static let keyLock = NSLock()
 
     enum Failure: LocalizedError {
         case keyUnavailable
@@ -20,6 +21,8 @@ enum SecureCache {
     }
 
     private static func encryptionKey() throws -> SymmetricKey {
+        keyLock.lock()
+        defer { keyLock.unlock() }
         if let existing = TokenStore.shared.read(keyName),
            let data = Data(base64Encoded: existing), data.count == 32 {
             return SymmetricKey(data: data)

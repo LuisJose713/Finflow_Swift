@@ -15,6 +15,7 @@ struct FinFlowApp: App {
     init() {
         #if DEBUG
         if ProcessInfo.processInfo.environment["FINFLOW_UI_TESTING"] == "1" {
+            _appLock = StateObject(wrappedValue: AppLockStore(authenticator: PreviewDeviceAuthenticator()))
             // XCTest launches a clean synthetic session, never a real account.
             TokenStore.shared.deleteAll()
             if let bundleID = Bundle.main.bundleIdentifier {

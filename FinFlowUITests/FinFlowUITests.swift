@@ -2,11 +2,12 @@ import XCTest
 
 @MainActor
 final class FinFlowUITests: XCTestCase {
-    private func launch(failure: Bool = false, largeText: Bool = false) -> XCUIApplication {
+    private func launch(failure: Bool = false, largeText: Bool = false, admin: Bool = false) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchEnvironment["FINFLOW_UI_TESTING"] = "1"
         if failure { app.launchEnvironment["FINFLOW_UI_FAILURE"] = "1" }
+        if admin { app.launchEnvironment["FINFLOW_UI_ADMIN"] = "1" }
         app.launchArguments = ["-AppleLanguages", "(es)", "-AppleLocale", "es_CO"]
         if largeText { app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"] }
         app.launch()
@@ -80,8 +81,12 @@ final class FinFlowUITests: XCTestCase {
 
     func testEveryFinanceDestinationLoads() {
         let app = launch(); signIn(app)
+        let loadedContent = ["accounts": "Cuenta principal", "budgets": "Alimentación", "recurring": "Internet del hogar", "categories": "Trabajo", "planned": "Matrícula universitaria", "reports": "Compartir PDF", "plans": "Tu plan actual", "advisor": "Tu asistente financiero", "settings": "Cuenta"]
         for route in ["accounts", "budgets", "recurring", "categories", "planned", "reports", "plans", "advisor", "settings"] {
             open(route, in: app)
+            let content = loadedContent[route]!
+            XCTAssertTrue(app.staticTexts[content].firstMatch.waitForExistence(timeout: 8)
+                          || app.buttons[content].firstMatch.exists, "Missing content in \(route)")
             capture(app, "screen-\(route)")
             XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "No pudimos interpretar")).firstMatch.exists)
             if app.buttons["Cerrar"].firstMatch.exists { app.buttons["Cerrar"].firstMatch.tap() }
@@ -115,5 +120,68 @@ final class FinFlowUITests: XCTestCase {
         let app = launch(largeText: true)
         XCTAssertTrue(app.buttons["auth.submit"].waitForExistence(timeout: 15))
         capture(app, "07-large-text-login")
+    }
+
+    func testCreateGoalAndAdvisorChat() {
+        let app = launch(); signIn(app)
+        app.tabBars.buttons["Metas"].tap()
+        XCTAssertTrue(app.buttons["goals.add"].waitForExistence(timeout: 5))
+        app.buttons["goals.add"].tap()
+        let name = app.textFields["Nombre de la meta"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.tap(); name.typeText("Meta de prueba iOS")
+        let amount = app.textFields["Monto objetivo (COP)"]
+        amount.tap(); amount.typeText("2000000")
+        if app.buttons["Listo"].exists { app.buttons["Listo"].tap() }
+        capture(app, "form-goal")
+        app.buttons["Guardar meta"].tap()
+        XCTAssertTrue(app.buttons["goals.add"].waitForExistence(timeout: 8))
+        open("advisor", in: app)
+        let input = app.textFields["advisor.input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 5))
+        input.tap(); input.typeText("Quiero organizar mi presupuesto")
+        app.buttons["advisor.send"].tap()
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Podemos empezar por definir")).firstMatch.waitForExistence(timeout: 8))
+        capture(app, "advisor-conversation")
+    }
+
+    func testSecurityAndAccountDeletionConfirmation() {
+        let app = launch(); signIn(app)
+        open("settings", in: app)
+        app.buttons["Contraseña y sesiones"].tap()
+        XCTAssertTrue(app.switches["security.biometricToggle"].waitForExistence(timeout: 5))
+        capture(app, "security")
+        let password = app.secureTextFields["security.deletePassword"]
+        for _ in 0..<7 where !password.isHittable { app.swipeUp() }
+        password.tap(); password.typeText("PruebaSegura2026!")
+        let confirmation = app.textFields["security.deleteConfirmation"]
+        confirmation.tap(); confirmation.typeText("ELIMINAR")
+        if app.buttons["Listo"].exists { app.buttons["Listo"].tap() }
+        let remove = app.buttons["Eliminar mi cuenta definitivamente"]
+        for _ in 0..<3 where !remove.isHittable { app.swipeUp() }
+        remove.tap()
+        XCTAssertTrue(app.buttons["Sí, eliminar cuenta"].waitForExistence(timeout: 5))
+        capture(app, "account-deletion-confirmation")
+        app.buttons["Cancelar"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["Eliminar mi cuenta definitivamente"].exists)
+    }
+
+    func testDrawerSwipeAwayFromScreenEdge() {
+        let app = launch(); signIn(app)
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.30))
+        let finish = app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.30))
+        start.press(forDuration: 0.05, thenDragTo: finish)
+        XCTAssertTrue(app.buttons["Cerrar menú"].waitForExistence(timeout: 5))
+        capture(app, "drawer-swipe")
+    }
+
+    func testAdministratorDestinationsWithSyntheticRole() {
+        let app = launch(admin: true); signIn(app)
+        for route in ["admin", "billing"] {
+            open(route, in: app)
+            capture(app, "screen-\(route)")
+            XCTAssertFalse(app.staticTexts["Acceso restringido"].exists)
+            app.buttons["Cerrar"].firstMatch.tap()
+        }
     }
 }

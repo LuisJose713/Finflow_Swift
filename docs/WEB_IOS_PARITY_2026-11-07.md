@@ -1,3 +1,5 @@
+> Documento histórico. Para el cliente actual, backend Railway, Face ID, Excel y recordatorios locales, consulta [la revisión del 12 de noviembre](IOS_QA_2026-11-12.md).
+
 # FinFlow — paridad Web ↔ iOS (7 de noviembre de 2026)
 
 ## Principio

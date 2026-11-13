@@ -86,7 +86,7 @@ struct TransactionsView: View {
             }
             .navigationTitle("Movimientos")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { Menu { Button("Exportar PDF", systemImage: "doc.richtext") { Task { await export("pdf") } }; Button("Exportar Excel", systemImage: "tablecells") { Task { await export("xlsx") } }; Button("Exportar CSV", systemImage: "tablecells.badge.ellipsis") { Task { await export("csv") } } } label: { Image(systemName: "square.and.arrow.up") }.disabled(isExporting || showingShare) }
+                ToolbarItem(placement: .topBarTrailing) { Menu { Button("Exportar PDF", systemImage: "doc.richtext") { Task { await export("pdf") } }; Button("Exportar Excel", systemImage: "tablecells") { Task { await export("xlsx") } }; Button("Exportar CSV", systemImage: "tablecells.badge.ellipsis") { Task { await export("csv") } } } label: { Image(systemName: "square.and.arrow.up") }.accessibilityLabel("Exportar movimientos").disabled(isExporting || showingShare) }
                 ToolbarItem(placement: .topBarTrailing) { Button { showingCreate = true } label: { Image(systemName: "plus.circle.fill") }.accessibilityLabel("Nuevo movimiento").accessibilityIdentifier("transactions.add") }
             }
             .task { await load() }

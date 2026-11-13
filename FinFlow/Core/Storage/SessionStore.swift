@@ -17,6 +17,7 @@ final class SessionStore: ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 guard let self, TokenStore.shared.read("token") == nil else { return }
+                if let ownerID = self.user?.id { OfflineTransactionStore.shared.clear(userID: ownerID) }
                 self.authOperation = UUID()
                 self.user = nil
                 self.isAuthenticated = false

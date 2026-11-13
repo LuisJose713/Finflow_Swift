@@ -54,6 +54,30 @@ for key, obj in objects.items():
 
 scheme = ET.parse(project_path / "FinFlow.xcodeproj/xcshareddata/xcschemes/FinFlow.xcscheme")
 assert len(scheme.findall(".//TestableReference")) == 2
+registered_targets = set(objects[project["rootObject"]]["targets"])
+for test in scheme.findall(".//TestableReference/BuildableReference"):
+    assert test.attrib["BlueprintIdentifier"] in registered_targets, "Test target not registered in project"
+source_paths = {}
+
+
+def walk_group(identifier, base):
+    obj = objects[identifier]
+    if obj.get("isa") == "PBXGroup":
+        directory = base / obj.get("path", "")
+        for child in obj.get("children", []):
+            walk_group(child, directory)
+    elif obj.get("isa") == "PBXFileReference" and obj.get("sourceTree") == "<group>":
+        source_paths[identifier] = base / obj["path"]
+
+
+walk_group(objects[project["rootObject"]]["mainGroup"], project_path)
+for target in registered_targets:
+    for phase in objects[target]["buildPhases"]:
+        if objects[phase]["isa"] == "PBXSourcesBuildPhase":
+            for build in objects[phase]["files"]:
+                ref = objects[build]["fileRef"]
+                assert ref in source_paths, f"Unreachable source group: {ref}"
+                assert source_paths[ref].is_file(), source_paths[ref]
 icon = (project_path / "FinFlow/Assets.xcassets/AppIcon.appiconset/FinFlowIcon.png").read_bytes()
 assert icon[:8] == b"\x89PNG\r\n\x1a\n" and struct.unpack(">II", icon[16:24]) == (1024, 1024)
 for obj in objects.values():

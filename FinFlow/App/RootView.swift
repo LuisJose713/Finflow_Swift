@@ -52,13 +52,15 @@ struct RootView: View {
             await session.restoreSession()
             checkingSession = false
         }
+        .onChange(of: session.isAuthenticated) { wasAuthenticated, authenticated in
+            if wasAuthenticated && !authenticated { navigation.clear() }
+        }
         .task(id: session.user?.id) {
             appLock.prepare(ownerID: session.user?.id)
             if let currentUser = session.user, session.isAuthenticated {
                 await appLock.unlock(automatically: true)
                 await refreshPrivacy(userID: currentUser.id)
             } else {
-                navigation.clear()
                 showPrivacyNotice = false
                 requirePrivacyConsent = false
                 privacyPolicy = nil

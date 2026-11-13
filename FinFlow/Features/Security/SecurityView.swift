@@ -101,6 +101,8 @@ struct SecurityView: View {
                 }
             }
             .scrollContentBackground(.hidden)
+            .scrollDismissesKeyboard(.interactively)
+            .modifier(FinFlowKeyboardDismiss())
         }
         .navigationTitle("Seguridad")
         .confirmationDialog("¿Cerrar todas las sesiones?", isPresented: $showConfirmRevocation,

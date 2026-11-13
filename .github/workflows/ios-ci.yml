@@ -50,7 +50,7 @@ jobs:
         run: |
           swiftc -parse-as-library FinFlow/Core/Models/Models.swift FinFlow/Core/Utilities/Formatters.swift scripts/APIContractChecks.swift -o "$RUNNER_TEMP/api-checks"
           "$RUNNER_TEMP/api-checks"
-      - name: Build for iOS Simulator (no signing)
+      - name: Build for iOS Simulator (ad hoc signing)
         run: |
           set -o pipefail
           xcodebuild \
@@ -60,7 +60,7 @@ jobs:
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$RUNNER_TEMP/FinFlowDerivedData" \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- \
             build 2>&1 | tee "$RUNNER_TEMP/finflow-build.log"
       - name: Unit and iPhone UI regression tests
         shell: bash
@@ -74,11 +74,13 @@ jobs:
           ')
           test -n "$UDID"
           echo "FINFLOW_PHONE_UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
           xcodebuild test -project FinFlow.xcodeproj -scheme FinFlow \
             -destination "platform=iOS Simulator,id=$UDID" \
             -derivedDataPath "$RUNNER_TEMP/FinFlowDerivedData" \
             -resultBundlePath "$RUNNER_TEMP/FinFlow-iPhone.xcresult" \
-            -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO \
+            -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- \
             2>&1 | tee "$RUNNER_TEMP/finflow-test.log"
       - name: iPad layout and accessibility tests
         shell: bash
@@ -98,7 +100,7 @@ jobs:
             -only-testing:FinFlowUITests/FinFlowUITests/testLoginAndRegistrationValidation \
             -only-testing:FinFlowUITests/FinFlowUITests/testDashboardChartsAndAmounts \
             -only-testing:FinFlowUITests/FinFlowUITests/testAccessibilityLargeText \
-            -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO \
+            -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- \
             2>&1 | tee "$RUNNER_TEMP/finflow-ipad-test.log"
       - name: Build Release for physical iPhone and iPad
         run: |
@@ -126,7 +128,7 @@ jobs:
           xcrun simctl boot "$UDID" || true
           xcrun simctl bootstatus "$UDID" -b
           xcrun simctl install "$UDID" "$APP_PATH"
-          xcrun simctl launch "$UDID" com.finflow.ios
+          SIMCTL_CHILD_FINFLOW_UI_TESTING=1 xcrun simctl launch "$UDID" com.finflow.ios
           sleep 8
           xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/finflow-ios-launch.png"
       - name: Upload simulator launch screenshot

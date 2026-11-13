@@ -16,8 +16,8 @@ enum FinFlowTheme {
     static let onAccent = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark ? UIColor(red: 0.04, green: 0.09, blue: 0.16, alpha: 1) : .white
     })
-    static let mint = Color(red: 0.12, green: 0.66, blue: 0.45)
-    static let danger = Color(red: 0.88, green: 0.20, blue: 0.25)
+    static let mint = adaptive(light: 0x087A4B, dark: 0x4CC99B)
+    static let danger = adaptive(light: 0xC22E45, dark: 0xFF7F8F)
     static let secondaryText = Color.secondary
 
     private static func adaptive(light: UInt32, dark: UInt32) -> Color {

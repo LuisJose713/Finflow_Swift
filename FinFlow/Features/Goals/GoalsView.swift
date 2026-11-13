@@ -8,6 +8,7 @@ struct GoalsView: View {
     @State private var editingGoal: FinanceGoal?
     @State private var historyGoal: FinanceGoal?
     @State private var fundingGoal: FinanceGoal?
+    @State private var deletingGoal: FinanceGoal?
     @State private var fundAmount = ""
     @State private var isFunding = false
 
@@ -29,6 +30,14 @@ struct GoalsView: View {
             .task { await load() }
             .sheet(isPresented: $showingForm, onDismiss: { Task { await load() } }) { GoalFormView(goal: editingGoal) }
             .sheet(item: $historyGoal) { goal in GoalHistoryView(goal: goal) }
+            .confirmationDialog("¿Eliminar esta meta y su historial?", isPresented: Binding(
+                get: { deletingGoal != nil }, set: { if !$0 { deletingGoal = nil } }
+            ), titleVisibility: .visible) {
+                Button("Eliminar meta", role: .destructive) {
+                    if let goal = deletingGoal { Task { await delete(goal); deletingGoal = nil } }
+                }
+                Button("Cancelar", role: .cancel) { deletingGoal = nil }
+            }
             .sheet(item: $fundingGoal) { goal in
                 NavigationStack {
                     Form {
@@ -59,7 +68,7 @@ struct GoalsView: View {
         SectionCard(title: "\(goal.icon ?? "🎯")  \(goal.name)", subtitle: goal.deadline.isEmpty ? nil : "Fecha objetivo: \(goal.deadline)") {
             HStack(alignment: .firstTextBaseline) { Text(CurrencyFormatter.format(goal.currentAmount)).font(.title3.bold()).foregroundStyle(FinFlowTheme.mint); Spacer(); Text("de \(CurrencyFormatter.format(goal.targetAmount))").font(.caption).foregroundStyle(FinFlowTheme.secondaryText) }
             GeometryReader { proxy in ZStack(alignment: .leading) { Capsule().fill(FinFlowTheme.elevated); Capsule().fill(FinFlowTheme.accent).frame(width: proxy.size.width * goal.progress) } }.frame(height: 8)
-            HStack { Text("\(Int(goal.progress * 100))% completado").font(.caption).foregroundStyle(FinFlowTheme.secondaryText); Spacer(); Menu { if goal.status == "active" { Button("Agregar fondos", systemImage: "plus.circle") { fundingGoal = goal; fundAmount = "" } }; Button("Historial de aportes", systemImage: "clock.arrow.circlepath") { historyGoal = goal }; Button("Editar", systemImage: "pencil") { editingGoal = goal; showingForm = true }; if goal.status == "active" { Button("Marcar completada", systemImage: "checkmark.circle") { Task { await setStatus(goal, "completed") } }; Button("Cancelar meta", systemImage: "xmark.circle") { Task { await setStatus(goal, "cancelled") } } } else { Button("Reactivar meta", systemImage: "arrow.counterclockwise") { Task { await setStatus(goal, "active") } } }; Button("Eliminar", systemImage: "trash", role: .destructive) { Task { await delete(goal) } } } label: { Image(systemName: "ellipsis.circle").font(.title3) } }
+            HStack { Text("\(Int(goal.progress * 100))% completado").font(.caption).foregroundStyle(FinFlowTheme.secondaryText); Spacer(); Menu { if goal.status == "active" { Button("Agregar fondos", systemImage: "plus.circle") { fundingGoal = goal; fundAmount = "" } }; Button("Historial de aportes", systemImage: "clock.arrow.circlepath") { historyGoal = goal }; Button("Editar", systemImage: "pencil") { editingGoal = goal; showingForm = true }; if goal.status == "active" { Button("Marcar completada", systemImage: "checkmark.circle") { Task { await setStatus(goal, "completed") } }; Button("Cancelar meta", systemImage: "xmark.circle") { Task { await setStatus(goal, "cancelled") } } } else { Button("Reactivar meta", systemImage: "arrow.counterclockwise") { Task { await setStatus(goal, "active") } } }; Button("Eliminar", systemImage: "trash", role: .destructive) { deletingGoal = goal } } label: { Image(systemName: "ellipsis.circle").font(.title3) } }
             if let description = goal.description, !description.isEmpty { Text(description).font(.caption).foregroundStyle(FinFlowTheme.secondaryText) }
         }
     }

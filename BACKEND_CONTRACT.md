@@ -1,13 +1,15 @@
 # Contrato actual FinFlow iOS ↔ Spring Boot
 
-Versión revisada el 7 de noviembre de 2026 contra los controladores del repositorio `LuisJose713/WS_FINFLOW`.
+Versión revisada el 12 de noviembre de 2026 contra los controladores del repositorio `LuisJose713/WS_FINFLOW`. El mapeo de código no sustituye las pruebas autenticadas del despliegue.
 
 ## Autenticación y transporte
 
-- Base URL de producción, fija y HTTPS: `https://finflow-backend-yqhi.onrender.com`.
-- `POST /auth/login`: `{email,password}` → `{token,user:{id,name,email,role}}`.
+- Base URL de producción, fija y HTTPS: `https://finflow-backend-production.up.railway.app`.
+- `POST /auth/login`: `{email,password}` → `{token,refreshToken,user:{id,name,email,role}}`.
 - `POST /auth/register`: `{name,email,password}` → misma forma; contraseña >=8, rol servidor USER.
 - `GET /auth/me`: consulta autenticada que valida la sesión y devuelve el rol actual.
+- `POST /auth/session`: intercambia una sesión existente por JWT/refresh; `POST /auth/refresh` rota el refresh token y `POST /auth/logout` lo revoca.
+- Face ID/Touch ID/código se verifican localmente con LocalAuthentication. El servidor sigue autorizando cada petición con el JWT.
 - Endpoints protegidos: `Authorization: Bearer <JWT>` desde Keychain.
 - **No** enviar `X-User-Id`. Todos los recursos usan identidad derivada del token en Spring Security.
 - No solicitar vida útil prolongada usando un header `X-Client-Type: mobile` (el backend no lo permite).
@@ -18,9 +20,9 @@ Versión revisada el 7 de noviembre de 2026 contra los controladores del reposit
 |---|---|---|
 | Dashboard | GET /transactions/stats | TransactionStats |
 | Movimientos | GET/POST /transactions | Lista/FinanceTransaction |
-| Eliminar movimiento | DELETE /transactions/{id} | 204 |
+| Editar / eliminar movimiento | PUT/DELETE /transactions/{id} | FinanceTransaction / 204 |
 | Filtros / años | GET /transactions?type&year&month&categoryId&search, GET /transactions/years | Transacciones / años |
-| Exportaciones | GET /transactions/export/pdf, /transactions/export/csv | Data |
+| Exportaciones | GET /transactions/export/pdf, /transactions/export/xlsx, /transactions/export/csv | Data |
 | Categorías visibles | GET /categories | `[{id,name,type,userId?,createdAt?}]` |
 | Categorías personales | POST /categories, PUT/DELETE /categories/{id} | Category / 204; globales solo lectura |
 | Metas | GET/POST /goals; PUT/DELETE /goals/{id} | Goal / 204 |
@@ -33,6 +35,7 @@ Versión revisada el 7 de noviembre de 2026 contra los controladores del reposit
 | Vencimientos | POST /recurring/process-due | `{created}`; servidor evita registros duplicados por vencimiento |
 | Cambio de contraseña | POST /auth/change-password | `{currentPassword,newPassword,confirmPassword}` → `{status,logoutRequired}` |
 | Cierre global de sesiones | POST /auth/revoke-sessions | `{password}` → `{status,logoutRequired}`; token_version invalida JWT previos |
+| Eliminar cuenta propia | DELETE /auth/account | `{password}` → 204; verificación de contraseña en API y borrado transaccional en DB |
 | Presupuesto mensual | GET /budgets?year&month | BudgetOverview[] con `limitAmount,spent,remaining,percentUsed,status,currency` |
 | Crear presupuesto | POST /budgets | `{categoryId,year,month,amount}` → MonthlyBudget |
 | Editar límite | PUT /budgets/{id} | `{amount}` → MonthlyBudget |
@@ -42,6 +45,12 @@ Versión revisada el 7 de noviembre de 2026 contra los controladores del reposit
 | Administración | GET /admin/overview | AdminOverview (solo ROLE_ADMIN), agregados, no finanzas de terceros |
 | Verificar rol | GET /admin/verify | `{status,role}` |
 | Asesor IA | POST /ai/chat | `{mensaje}` → `{respuesta}` |
+| Preferencias de interfaz | GET /preferences/ui; PUT /preferences/ui/{cardID} | Tarjetas ocultas por usuario autenticado |
+| Política / autorizaciones | GET /privacy/policy, /privacy/status, /privacy/receipt; POST /privacy/consent, /privacy/marketing | Política publicada, estado y recibos del servidor |
+| Derechos de datos | POST /privacy/rights-request; GET /privacy/rights-requests | Solicitud y seguimiento |
+| Planes | GET /billing/catalog, /billing/me, /billing/quote | Catálogo, acceso vigente y cotización; no implica cobro |
+| Gestión de planes | GET /admin/billing/plans; PUT /admin/billing/plans/{code}; GET/POST /admin/billing/promotions; PUT /admin/billing/promotions/{code}; POST /admin/billing/grants | Solo ADMIN |
+| Monitor | GET /admin/monitor | Servicios y latencias, solo ADMIN |
 
 ## Mapeo importante
 
@@ -57,7 +66,7 @@ Versión revisada el 7 de noviembre de 2026 contra los controladores del reposit
 
 ## No confundir compilación con despliegue
 
-- Una compilación exitosa de Xcode valida el proyecto iOS; no demuestra que los últimos commits del backend ya estén en Render.
+- Una compilación exitosa de Xcode valida el proyecto iOS; no demuestra que todos los servicios del backend estén operativos.
 - La validación autenticada real (incluida separación entre usuarios) y la rotación de credenciales de producción continúan siendo requisitos.
-- Cuentas/billeteras aún necesitan API backend antes de habilitar su gestión desde iOS.
+- Las pruebas aisladas de XCTest no escriben en producción. Los flujos reales, APNs, biometría física y firma deben verificarse por separado.
 - Ningún secret debe aparecer en GitHub, archivos de código o notas de ejecución.

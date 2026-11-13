@@ -1,6 +1,15 @@
 #if DEBUG
 import Foundation
 
+@MainActor
+final class PreviewDeviceAuthenticator: LocalAuthenticationProviding {
+    let isAvailable = false
+    let name = "Código del dispositivo"
+    let symbol = "lock.shield"
+    func authenticate(reason: String) async throws -> Bool { false }
+    func cancel() {}
+}
+
 /// Deterministic, synthetic data for XCTest only. Every request is intercepted;
 /// this transport never falls through to production. Excluded from Release.
 final class PreviewAPIProtocol: URLProtocol, @unchecked Sendable {
@@ -92,6 +101,21 @@ private final class PreviewServer: @unchecked Sendable {
         if path == "/ai/chat" { return (200, ["respuesta": "Podemos empezar por definir un presupuesto mensual y reservar una parte de tus ingresos para tu fondo de emergencia."]) }
         if path == "/billing/catalog" { return (200, ["currency": "COP", "checkoutEnabled": false, "offers": [["code": "MONTHLY", "title": "FinFlow Pro", "description": "Más posibilidades para tus finanzas", "originalCop": 15000, "priceCop": 15000, "savingsPercent": 0, "checkoutEnabled": false]]]) }
         if path == "/billing/me" { return (200, ["planCode": "FREE", "pro": false]) }
+        if path == "/admin/overview" {
+            return (200, ["users": 12, "newUsers30Days": 3, "activeUsers30Days": 8,
+                          "transactions": 74, "transactions30Days": 25, "incomeTransactions": 18,
+                          "expenseTransactions": 56, "goals": 9, "plannedExpenses": 7,
+                          "pendingExpenses": 2, "customCategories": 5, "systemCategories": 10,
+                          "monthlyActivity": [["month": "2026-11", "signups": 3, "transactions": 25]]])
+        }
+        if path == "/admin/monitor" {
+            return (200, ["overall": "UP", "checkedAt": "2026-11-12T20:00:00Z",
+                          "services": [["key": "api", "name": "API de prueba", "status": "UP", "latencyMs": 12, "detail": "Datos ficticios, sin conexión a producción"]]])
+        }
+        if path == "/admin/billing/plans" {
+            return (200, [["code": "MONTHLY", "title": "Pro mensual", "description": "Plan ficticio", "priceCop": 15000, "active": true, "sortOrder": 1]])
+        }
+        if path == "/admin/billing/promotions" { return (200, []) }
         return (501, ["message": "Ruta no implementada en el entorno de pruebas: \(method) \(path)"])
     }
 

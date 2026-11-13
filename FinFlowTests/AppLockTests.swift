@@ -10,9 +10,11 @@ private final class TestAuthenticator: LocalAuthenticationProviding {
     var result = false
     var calls = 0
     var delayed = false
+    var cancelled = false
     var continuation: CheckedContinuation<Bool, Error>?
     func authenticate(reason: String) async throws -> Bool {
         calls += 1
+        if cancelled { throw LAError(.userCancel) }
         if delayed { return try await withCheckedThrowingContinuation { continuation = $0 } }
         return result
     }
@@ -103,5 +105,25 @@ final class AppLockTests: XCTestCase {
         XCTAssertEqual(auth.calls, 1)
         auth.finish(true); await attempt.value
         XCTAssertFalse(store.isLocked)
+    }
+
+    @MainActor func testSystemCancellationKeepsTheLock() async {
+        let auth = TestAuthenticator(); auth.cancelled = true
+        let store = makeStore(auth); store.prepare(ownerID: 1)
+        await store.unlock()
+        XCTAssertTrue(store.isLocked)
+        XCTAssertFalse(store.isAuthenticating)
+    }
+
+    @MainActor func testNotificationDestinationWaitsForAuthenticatedNavigation() {
+        let navigation = AppNavigationStore()
+        navigation.open("transactions")
+        XCTAssertEqual(navigation.pendingDestination, .transactions)
+        navigation.open("https://example.invalid")
+        XCTAssertEqual(navigation.pendingDestination, .transactions)
+        XCTAssertEqual(navigation.takeDestination(), .transactions)
+        XCTAssertNil(navigation.takeDestination())
+        navigation.open("dashboard"); navigation.clear()
+        XCTAssertNil(navigation.pendingDestination)
     }
 }
