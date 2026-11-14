@@ -198,6 +198,17 @@ struct PasswordInput: View {
     @Binding var text: String
     var isNew = false
     @State private var revealed = false
+
+    // Synthetic UI tests must not trigger a system password-save or AutoFill
+    // sheet over the privacy notice. Real users retain standard AutoFill.
+    private var contentType: UITextContentType {
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["FINFLOW_UI_TESTING"] == "1" {
+            return .oneTimeCode
+        }
+        #endif
+        return isNew ? .newPassword : .password
+    }
     init(_ title: String, text: Binding<String>, isNew: Bool = false) {
         self.title = title; self._text = text; self.isNew = isNew
     }
@@ -207,7 +218,7 @@ struct PasswordInput: View {
                 if revealed { TextField(title, text: $text) }
                 else { SecureField(title, text: $text) }
             }
-            .textContentType(isNew ? .newPassword : .password)
+            .textContentType(contentType)
             .textInputAutocapitalization(.never).autocorrectionDisabled().privacySensitive()
             Button { revealed.toggle() } label: {
                 Image(systemName: revealed ? "eye.slash" : "eye").frame(width: 44, height: 44)
