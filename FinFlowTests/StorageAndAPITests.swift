@@ -2,6 +2,20 @@ import XCTest
 @testable import FinFlow
 
 final class StorageAndAPITests: XCTestCase {
+    func testCalendarDayTransportPreservesLocalDayAtMonthBoundary() throws {
+        let instant = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-12-01T02:30:00Z"))
+        for (zone, expected) in [("America/Bogota", "2026-11-30"), ("Asia/Tokyo", "2026-12-01")] {
+            let timeZone = try XCTUnwrap(TimeZone(identifier: zone))
+            let day = DateFormatters.calendarDayFormatter(in: timeZone).string(from: instant)
+            let request = CreateTransactionRequest(description: "Calendar day", amount: 25000,
+                type: "expense", categoryId: 1, date: day, notes: nil)
+            let wire = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
+            XCTAssertEqual(wire["date"] as? String, expected, zone)
+        }
+        XCTAssertEqual(DateFormatters.isoDay.timeZone, TimeZone.current)
+        XCTAssertEqual(DateFormatters.isoDay.calendar.identifier, .gregorian)
+    }
+
     func testEncryptedCacheRejectsTampering() throws {
         let clear = Data("private-financial-data".utf8)
         let encrypted = try SecureCache.seal(clear)

@@ -27,7 +27,17 @@ enum DateFormatters {
         let f = DateFormatter(); f.locale = Locale(identifier: "es_CO"); f.dateStyle = .medium; return f
     }
     static var isoDay: DateFormatter {
-        let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd"; f.timeZone = TimeZone(secondsFromGMT: 0); return f
+        calendarDayFormatter(in: .current)
+    }
+    // A movement/deadline is a calendar day chosen in the device's time zone,
+    // not a UTC instant. UTC would move evening entries to tomorrow in Colombia.
+    static func calendarDayFormatter(in timeZone: TimeZone) -> DateFormatter {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.calendar = Calendar(identifier: .gregorian)
+        f.dateFormat = "yyyy-MM-dd"
+        f.timeZone = timeZone
+        return f
     }
     static func parse(_ value: String?) -> Date? {
         guard let value, !value.isEmpty else { return nil }

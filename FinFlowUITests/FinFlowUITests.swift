@@ -67,6 +67,13 @@ final class FinFlowUITests: XCTestCase {
         XCTAssertTrue(element.isHittable, "Control must be reachable by scrolling: \(element)")
     }
 
+    private func dismissKeyboard(in app: XCUIApplication) {
+        if app.keyboards.firstMatch.exists {
+            tap(app.buttons["Listo"].firstMatch)
+            XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
+        }
+    }
+
     private func capture(_ app: XCUIApplication, _ name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name; attachment.lifetime = .keepAlways
@@ -194,14 +201,18 @@ final class FinFlowUITests: XCTestCase {
         XCTAssertTrue(app.switches["security.biometricToggle"].waitForExistence(timeout: 5))
         capture(app, "security")
         let password = app.secureTextFields["security.deletePassword"]
-        for _ in 0..<7 where !password.isHittable { app.swipeUp() }
-        password.tap(); password.typeText("PruebaSegura2026!")
+        reveal(password, in: app)
+        tap(password); password.typeText("PruebaSegura2026!")
+        // The password AutoFill/Done toolbar can cover the next Form row
+        // while XCTest still reports that row as hittable. Close it first.
+        dismissKeyboard(in: app)
         let confirmation = app.textFields["security.deleteConfirmation"]
-        confirmation.tap(); confirmation.typeText("ELIMINAR")
-        if app.buttons["Listo"].exists { app.buttons["Listo"].tap() }
+        reveal(confirmation, in: app)
+        tap(confirmation); confirmation.typeText("ELIMINAR")
+        dismissKeyboard(in: app)
         let remove = app.buttons["Eliminar mi cuenta definitivamente"]
-        for _ in 0..<3 where !remove.isHittable { app.swipeUp() }
-        remove.tap()
+        reveal(remove, in: app)
+        tap(remove)
         XCTAssertTrue(app.buttons["Sí, eliminar cuenta"].waitForExistence(timeout: 5))
         capture(app, "account-deletion-confirmation")
         app.buttons["Cancelar"].firstMatch.tap()

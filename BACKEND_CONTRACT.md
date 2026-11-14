@@ -54,6 +54,7 @@ Versión revisada el 12 de noviembre de 2026 contra los controladores del reposi
 
 ## Mapeo importante
 
+- Las fechas `yyyy-MM-dd` de movimientos y vencimientos conservan el día elegido en la zona horaria del dispositivo; no se convierten a UTC. Los timestamps con offset siguen representando instantes.
 - `FinanceGoal.name` corresponde al `Goal.title` del backend.
 - En una edición de meta se omite `currentAmount` para no sobrescribir los aportes existentes; el aporte se hace solo con PATCH.
 - `BudgetOverview` se devuelve en GET; POST/PUT devuelve otra entidad `MonthlyBudget`, decodificada por su `id`.

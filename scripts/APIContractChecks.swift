@@ -6,6 +6,10 @@ struct APIContractChecks {
         try JSONDecoder().decode(type, from: Data(json.utf8))
     }
     static func main() throws {
+        let boundary = ISO8601DateFormatter().date(from: "2026-12-01T02:30:00Z")!
+        precondition(DateFormatters.calendarDayFormatter(in: TimeZone(identifier: "America/Bogota")!).string(from: boundary) == "2026-11-30")
+        precondition(DateFormatters.calendarDayFormatter(in: TimeZone(identifier: "Asia/Tokyo")!).string(from: boundary) == "2026-12-01")
+        precondition(DateFormatters.isoDay.timeZone == TimeZone.current)
         let legacy = try decode(AuthResponse.self, #"{"token":"test-token","user":{"id":1,"email":"test@example.invalid","name":"Test"}}"#)
         precondition(legacy.refreshToken == nil && !legacy.user.isAdmin)
         let renewed = try decode(AuthResponse.self, #"{"token":"new-test-token","refreshToken":"opaque-test-refresh","user":{"id":1,"email":"test@example.invalid","name":"Test","role":"ADMIN"}}"#)
