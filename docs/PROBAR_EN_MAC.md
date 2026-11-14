@@ -48,7 +48,7 @@ La compilación de CI para simulador no es un archivo que puedas instalar direct
 
 En Xcode usa **Product > Test** (`⌘U`) con el esquema **FinFlow**. Las pruebas utilizan datos ficticios. Para uso normal pulsa **Run**; no agregues `FINFLOW_UI_TESTING` al esquema de ejecución.
 
-Los resultados remotos están en [GitHub Actions](https://github.com/LuisJose713/Finflow_Swift/actions/workflows/ios-ci.yml). El artefacto `finflow-ios-qa` contiene resultados y capturas de iPhone/iPad.
+Los resultados remotos están en [GitHub Actions](https://github.com/LuisJose713/Finflow_Swift/actions/workflows/ios-ci.yml). Los artefactos `finflow-ios-qa-iPhone` y `finflow-ios-qa-iPad` contienen los resultados y las capturas de cada dispositivo; `finflow-ios-release-log` contiene el registro de compilación Release.
 
 Al terminar con la Mac prestada, cierra sesión en FinFlow, elimina tu Apple Account de Xcode y retira los archivos de tu copia si no deseas dejarlos allí.
 
