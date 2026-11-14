@@ -166,6 +166,7 @@ private struct RegistrationPrivacySheet: View {
                 Button(action: done) {
                     Text(policy?.ready == true ? "Confirmar mi decisión" : "Entendido")
                         .frame(maxWidth: .infinity)
+                        .foregroundStyle(FinFlowTheme.onAccent)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(FinFlowTheme.accent)

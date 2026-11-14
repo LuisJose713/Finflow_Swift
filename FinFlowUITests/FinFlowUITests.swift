@@ -35,7 +35,8 @@ final class FinFlowUITests: XCTestCase {
         dismissPasswordSavePrompt(in: app)
         tap(understood)
         XCTAssertTrue(understood.waitForNonExistence(timeout: 8), "Privacy notice must close before entering FinFlow")
-        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 10))
+        // iPad presents the adaptive sidebar rather than an iPhone tab bar.
+        XCTAssertTrue(app.navigationBars["FinFlow"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["Cerrar menú"].exists, "A closed drawer must not expose its modal controls")
     }
 

@@ -84,7 +84,9 @@ struct PlannedExpensesView: View {
             if let notes = expense.notes, !notes.isEmpty { Text(notes).font(.caption).foregroundStyle(FinFlowTheme.secondaryText) }
             HStack {
                 if expense.status == "pending" {
-                    Button("Ejecutar") { executeTarget = expense }.buttonStyle(.borderedProminent).tint(FinFlowTheme.accent)
+                    Button { executeTarget = expense } label: {
+                        Text("Ejecutar").foregroundStyle(FinFlowTheme.onAccent)
+                    }.buttonStyle(.borderedProminent).tint(FinFlowTheme.accent)
                     Button("Editar") { editing = expense; showingForm = true }.buttonStyle(.bordered)
                 }
                 Spacer()

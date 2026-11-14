@@ -77,7 +77,9 @@ jobs:
           SIMCTL_CHILD_FINFLOW_UI_TESTING=1 xcrun simctl launch "$UDID" com.finflow.ios
           sleep 3
           xcrun simctl terminate "$UDID" com.finflow.ios
-          TEST_ARGS=()
+          # macOS Bash 3.2 rejects an empty array under nounset. Keep the
+          # shared option in the array for both device paths.
+          TEST_ARGS=(-parallel-testing-enabled NO)
           if [ "$FINFLOW_DEVICE" = "iPad" ]; then
             TEST_ARGS+=(
               -only-testing:FinFlowUITests/FinFlowUITests/testLoginAndRegistrationValidation
@@ -89,7 +91,7 @@ jobs:
             -destination "platform=iOS Simulator,id=$UDID" \
             -derivedDataPath "$RUNNER_TEMP/FinFlowDerivedData" \
             -resultBundlePath "$RUNNER_TEMP/FinFlow-$FINFLOW_DEVICE.xcresult" \
-            "${TEST_ARGS[@]}" -parallel-testing-enabled NO \
+            "${TEST_ARGS[@]}" \
             CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- \
             2>&1 | tee "$RUNNER_TEMP/finflow-test.log"
       - name: Upload regression log

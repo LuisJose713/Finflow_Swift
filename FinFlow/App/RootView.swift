@@ -666,8 +666,8 @@ struct PrivacyConsentGateSheet: View {
                                 saving = false
                             }
                         } label: {
-                            if saving { ProgressView() }
-                            else { Text("Aceptar y continuar") }
+                            if saving { ProgressView().tint(FinFlowTheme.onAccent) }
+                            else { Text("Aceptar y continuar").foregroundStyle(FinFlowTheme.onAccent) }
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(!accepted || saving)

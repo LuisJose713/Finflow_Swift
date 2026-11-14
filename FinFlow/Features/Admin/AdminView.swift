@@ -26,7 +26,9 @@ struct AdminView: View {
                         PresentationCard(cardID: "admin.intro", eyebrow: "Administración", title: "Una plataforma bajo control.", detail: "Indicadores agregados y estado de los servicios de FinFlow.", symbol: "lock.shield")
                         if let error {
                             ErrorBanner(message: error)
-                            Button("Volver a intentar") { Task { await load() } }
+                            Button { Task { await load() } } label: {
+                                Text("Volver a intentar").foregroundStyle(FinFlowTheme.onAccent)
+                            }
                                 .buttonStyle(.borderedProminent)
                         }
                         if loading { ProgressView("Cargando indicadores…").padding(24) }

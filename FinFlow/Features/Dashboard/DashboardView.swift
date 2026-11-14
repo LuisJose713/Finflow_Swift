@@ -45,7 +45,9 @@ struct DashboardView: View {
                         if let error {
                             VStack(alignment: .leading, spacing: 10) {
                                 ErrorBanner(message: error)
-                                Button("Reintentar conexión") { Task { await load() } }
+                                Button { Task { await load() } } label: {
+                                    Text("Reintentar conexión").foregroundStyle(FinFlowTheme.onAccent)
+                                }
                                     .buttonStyle(.borderedProminent)
                                     .tint(FinFlowTheme.accent)
                                     .disabled(isLoading)
@@ -177,6 +179,7 @@ struct DashboardView: View {
         Button { Task { await prepareEntry(.expense) } } label: {
             Label("Registrar gasto", systemImage: "minus.circle.fill")
                 .font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity, minHeight: 44)
+                .foregroundStyle(FinFlowTheme.onAccent)
         }
         .buttonStyle(.borderedProminent).tint(FinFlowTheme.accent).disabled(preparingEntry)
         .accessibilityIdentifier("dashboard.addExpense")
