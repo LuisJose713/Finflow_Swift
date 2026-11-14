@@ -20,6 +20,11 @@ final class FinFlowUITests: XCTestCase {
         app.launchArguments = ["-AppleLanguages", "(es)", "-AppleLocale", "es_CO"]
         if largeText { app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"] }
         app.launch()
+        addTeardownBlock {
+            // Finish each synthetic session before the next test changes the
+            // Dynamic Type setting or launches the same bundle on iPad.
+            if app.state != .notRunning { app.terminate() }
+        }
         return app
     }
 
@@ -46,10 +51,15 @@ final class FinFlowUITests: XCTestCase {
         // this expected dialog as an interruption, so query its actual button.
         let labels = ["Not Now", "Ahora no", "No guardar"]
         let decline = app.buttons.matching(NSPredicate(format: "label IN %@", labels)).firstMatch
-        if decline.waitForExistence(timeout: 8) {
-            tap(decline)
-            XCTAssertTrue(decline.waitForNonExistence(timeout: 8), "Password-saving dialog must close")
+        let visible = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND hittable == true"), object: decline)
+        if XCTWaiter.wait(for: [visible], timeout: 3) == .completed,
+           decline.exists, decline.isHittable {
+            decline.tap()
         }
+        // AutoFill can remove its optional suggestion without a tap. Hidden
+        // suggestions remain in the accessibility tree on iOS 26; their
+        // existence alone must not prevent the actual privacy control below.
     }
 
     private func tap(_ element: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
