@@ -14,10 +14,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build iOS Simulator
+  simulator:
+    name: ${{ matrix.device }} regression tests
     runs-on: macos-26
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [iPhone, iPad]
+    env:
+      FINFLOW_DEVICE: ${{ matrix.device }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,159 +32,123 @@ jobs:
           python3 scripts/verify_project.py
           xcodebuild -version
           xcodebuild -list -project FinFlow.xcodeproj
-      - name: Verify premium app icon
+      - name: Start simulator while the app builds
+        shell: bash
         run: |
-          python3 - <<'PY'
-          import struct
-          from pathlib import Path
-          path = Path("FinFlow/Assets.xcassets/AppIcon.appiconset/FinFlowIcon.png")
-          image = path.read_bytes()
-          assert image[:8] == b"\x89PNG\r\n\x1a\n", "Invalid PNG signature"
-          width, height = struct.unpack(">II", image[16:24])
-          assert (width, height) == (1024, 1024), "App Store icon must be 1024 square"
-          print("Premium app icon valid:", width, height)
-          PY
-      - name: Verify COP amount input contract
+          set -euo pipefail
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, os, sys
+          devices = [d for group in json.load(sys.stdin)["devices"].values() for d in group
+                     if d.get("isAvailable") and d["name"].startswith(os.environ["FINFLOW_DEVICE"])]
+          print(devices[0]["udid"] if devices else "")
+          ')
+          test -n "$UDID"
+          echo "FINFLOW_SIMULATOR_UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID" || true
+      - name: Verify app icon and COP, gesture and API contracts
+        if: matrix.device == 'iPhone'
+        shell: bash
         run: |
+          set -euo pipefail
+          python3 scripts/verify_project.py
           swiftc -parse-as-library FinFlow/Core/Utilities/Formatters.swift scripts/COPInputChecks.swift -o "$RUNNER_TEMP/cop-checks"
           "$RUNNER_TEMP/cop-checks"
-      - name: Verify interactive drawer gestures
-        run: |
           swiftc -parse-as-library FinFlow/Core/Utilities/DrawerSwipePolicy.swift scripts/DrawerSwipeChecks.swift -o "$RUNNER_TEMP/drawer-checks"
           "$RUNNER_TEMP/drawer-checks"
-      - name: Verify shared API contracts
-        run: |
           swiftc -parse-as-library FinFlow/Core/Models/Models.swift FinFlow/Core/Utilities/Formatters.swift scripts/APIContractChecks.swift -o "$RUNNER_TEMP/api-checks"
           "$RUNNER_TEMP/api-checks"
       - name: Build for iOS Simulator (ad hoc signing)
+        shell: bash
         run: |
-          set -o pipefail
-          xcodebuild \
-            -project FinFlow.xcodeproj \
-            -scheme FinFlow \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
+          set -euo pipefail
+          xcodebuild -project FinFlow.xcodeproj -scheme FinFlow -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$RUNNER_TEMP/FinFlowDerivedData" \
             CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- \
             build 2>&1 | tee "$RUNNER_TEMP/finflow-build.log"
-      - name: Unit and iPhone UI regression tests
+      - name: Run native regression tests
         shell: bash
         run: |
           set -euo pipefail
-          UDID=$(xcrun simctl list devices available -j | python3 -c '
-          import json, sys
-          phones = [d for group in json.load(sys.stdin)["devices"].values() for d in group
-                    if d.get("isAvailable") and d["name"].startswith("iPhone")]
-          print(phones[0]["udid"] if phones else "")
-          ')
-          test -n "$UDID"
-          echo "FINFLOW_PHONE_UDID=$UDID" >> "$GITHUB_ENV"
-          xcrun simctl boot "$UDID" || true
+          UDID="$FINFLOW_SIMULATOR_UDID"
           xcrun simctl bootstatus "$UDID" -b
-          # Warm up the installed app before XCTest attaches to a freshly
-          # booted simulator; the first launch can otherwise time out in Xcode.
-          xcrun simctl install "$UDID" "$RUNNER_TEMP/FinFlowDerivedData/Build/Products/Debug-iphonesimulator/FinFlow.app"
+          APP_PATH="$RUNNER_TEMP/FinFlowDerivedData/Build/Products/Debug-iphonesimulator/FinFlow.app"
+          xcrun simctl install "$UDID" "$APP_PATH"
           SIMCTL_CHILD_FINFLOW_UI_TESTING=1 xcrun simctl launch "$UDID" com.finflow.ios
           sleep 3
           xcrun simctl terminate "$UDID" com.finflow.ios
+          TEST_ARGS=()
+          if [ "$FINFLOW_DEVICE" = "iPad" ]; then
+            TEST_ARGS+=(
+              -only-testing:FinFlowUITests/FinFlowUITests/testLoginAndRegistrationValidation
+              -only-testing:FinFlowUITests/FinFlowUITests/testDashboardChartsAndAmounts
+              -only-testing:FinFlowUITests/FinFlowUITests/testAccessibilityLargeText
+            )
+          fi
           xcodebuild test -project FinFlow.xcodeproj -scheme FinFlow \
             -destination "platform=iOS Simulator,id=$UDID" \
             -derivedDataPath "$RUNNER_TEMP/FinFlowDerivedData" \
-            -resultBundlePath "$RUNNER_TEMP/FinFlow-iPhone.xcresult" \
-            -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- \
+            -resultBundlePath "$RUNNER_TEMP/FinFlow-$FINFLOW_DEVICE.xcresult" \
+            "${TEST_ARGS[@]}" -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- \
             2>&1 | tee "$RUNNER_TEMP/finflow-test.log"
-      - name: Upload iPhone regression log
+      - name: Upload regression log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: finflow-ios-iphone-test-log
+          name: finflow-ios-${{ matrix.device }}-test-log
           path: ${{ runner.temp }}/finflow-test.log
           retention-days: 7
-      - name: iPad layout and accessibility tests
-        if: ${{ !cancelled() }}
+      - name: Launch FinFlow and capture the screen
         shell: bash
         run: |
           set -euo pipefail
-          UDID=$(xcrun simctl list devices available -j | python3 -c '
-          import json, sys
-          pads = [d for group in json.load(sys.stdin)["devices"].values() for d in group
-                  if d.get("isAvailable") and d["name"].startswith("iPad")]
-          print(pads[0]["udid"] if pads else "")
-          ')
-          test -n "$UDID"
-          xcrun simctl shutdown "$FINFLOW_PHONE_UDID" || true
-          xcrun simctl boot "$UDID" || true
-          xcrun simctl bootstatus "$UDID" -b
-          xcodebuild test -project FinFlow.xcodeproj -scheme FinFlow \
-            -destination "platform=iOS Simulator,id=$UDID" \
-            -derivedDataPath "$RUNNER_TEMP/FinFlowDerivedData" \
-            -resultBundlePath "$RUNNER_TEMP/FinFlow-iPad.xcresult" \
-            -only-testing:FinFlowUITests/FinFlowUITests/testLoginAndRegistrationValidation \
-            -only-testing:FinFlowUITests/FinFlowUITests/testDashboardChartsAndAmounts \
-            -only-testing:FinFlowUITests/FinFlowUITests/testAccessibilityLargeText \
-            -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- \
-            2>&1 | tee "$RUNNER_TEMP/finflow-ipad-test.log"
-      - name: Build Release for physical iPhone and iPad
-        if: ${{ !cancelled() }}
-        run: |
-          set -o pipefail
-          xcodebuild -project FinFlow.xcodeproj -scheme FinFlow -configuration Release \
-            -destination 'generic/platform=iOS' \
-            -derivedDataPath "$RUNNER_TEMP/FinFlowRelease" \
-            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee "$RUNNER_TEMP/finflow-release.log"
-      - name: Boot iPhone Simulator and launch FinFlow
-        shell: bash
-        run: |
-          set -euo pipefail
-          APP_PATH="$RUNNER_TEMP/FinFlowDerivedData/Build/Products/Debug-iphonesimulator/FinFlow.app"
-          test -d "$APP_PATH" || { echo "::error::FinFlow.app missing"; exit 1; }
-
-          UDID=$(xcrun simctl list devices available -j | python3 -c '
-          import json, sys
-          data = json.load(sys.stdin)
-          phones = [d for group in data["devices"].values() for d in group
-                    if d.get("isAvailable") and d["name"].startswith("iPhone")]
-          print(phones[0]["udid"] if phones else "")
-          ')
-          test -n "$UDID" || { echo "::error::No iPhone simulator available"; exit 1; }
-          echo "Simulator: $UDID"
-          xcrun simctl boot "$UDID" || true
-          xcrun simctl bootstatus "$UDID" -b
-          xcrun simctl install "$UDID" "$APP_PATH"
-          SIMCTL_CHILD_FINFLOW_UI_TESTING=1 xcrun simctl launch "$UDID" com.finflow.ios
-          sleep 8
-          xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/finflow-ios-launch.png"
-      - name: Upload simulator launch screenshot
-        uses: actions/upload-artifact@v4
-        with:
-          name: finflow-ios-simulator-screenshot
-          path: ${{ runner.temp }}/finflow-ios-launch.png
-          retention-days: 7
+          SIMCTL_CHILD_FINFLOW_UI_TESTING=1 xcrun simctl launch "$FINFLOW_SIMULATOR_UDID" com.finflow.ios
+          sleep 3
+          xcrun simctl io "$FINFLOW_SIMULATOR_UDID" screenshot "$RUNNER_TEMP/finflow-launch.png"
       - name: Export screenshots from UI tests
         if: always()
+        shell: bash
         run: |
-          for device in iPhone iPad; do
-            if [ -d "$RUNNER_TEMP/FinFlow-$device.xcresult" ]; then
-              xcrun xcresulttool export attachments --path "$RUNNER_TEMP/FinFlow-$device.xcresult" \
-                --output-path "$RUNNER_TEMP/screenshots-$device" || true
-            fi
-          done
+          set -euo pipefail
+          RESULT="$RUNNER_TEMP/FinFlow-$FINFLOW_DEVICE.xcresult"
+          if [ -f "$RESULT/Info.plist" ]; then
+            xcrun xcresulttool export attachments --path "$RESULT" \
+              --output-path "$RUNNER_TEMP/screenshots-$FINFLOW_DEVICE"
+          fi
       - name: Upload test reports and visual evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: finflow-ios-qa
+          name: finflow-ios-qa-${{ matrix.device }}
           path: |
             ${{ runner.temp }}/FinFlow-*.xcresult
             ${{ runner.temp }}/screenshots-*
             ${{ runner.temp }}/finflow-*.log
-          retention-days: 7
-      - name: Upload build log on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: finflow-ios-build-log
-          path: ${{ runner.temp }}/finflow-build.log
+            ${{ runner.temp }}/finflow-launch.png
           retention-days: 7
 
+  release:
+    name: Release for physical iPhone and iPad
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Verify project
+        run: python3 scripts/verify_project.py
+      - name: Build Release without distribution credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -project FinFlow.xcodeproj -scheme FinFlow -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/FinFlowRelease" \
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee "$RUNNER_TEMP/finflow-release.log"
+      - name: Upload Release build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: finflow-ios-release-log
+          path: ${{ runner.temp }}/finflow-release.log
+          retention-days: 7

@@ -32,13 +32,23 @@ final class FinFlowUITests: XCTestCase {
         app.buttons["auth.submit"].tap()
         let understood = app.buttons["privacy.continue"]
         XCTAssertTrue(understood.waitForExistence(timeout: 15))
-        // Interruption monitors run when an interaction is attempted, rather
-        // than while waiting for an underlying control to become hittable.
-        app.tap()
+        dismissPasswordSavePrompt(in: app)
         tap(understood)
         XCTAssertTrue(understood.waitForNonExistence(timeout: 8), "Privacy notice must close before entering FinFlow")
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["Cerrar menú"].exists, "A closed drawer must not expose its modal controls")
+    }
+
+    private func dismissPasswordSavePrompt(in app: XCUIApplication) {
+        // AutoFill is a remote sheet inside the app's accessibility hierarchy
+        // on iPhone, and an alert on iPad. XCTest does not consistently treat
+        // this expected dialog as an interruption, so query its actual button.
+        let labels = ["Not Now", "Ahora no", "No guardar"]
+        let decline = app.buttons.matching(NSPredicate(format: "label IN %@", labels)).firstMatch
+        if decline.waitForExistence(timeout: 8) {
+            tap(decline)
+            XCTAssertTrue(decline.waitForNonExistence(timeout: 8), "Password-saving dialog must close")
+        }
     }
 
     private func tap(_ element: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
