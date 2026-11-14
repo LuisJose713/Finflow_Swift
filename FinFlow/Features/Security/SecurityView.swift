@@ -114,9 +114,8 @@ struct SecurityView: View {
         } message: {
             Text("También se invalidará el acceso desde la web.")
         }
-        .confirmationDialog("¿Eliminar tu cuenta definitivamente?",
-                            isPresented: $showConfirmDeletion,
-                            titleVisibility: .visible) {
+        .alert("¿Eliminar tu cuenta definitivamente?",
+               isPresented: $showConfirmDeletion) {
             Button("Sí, eliminar cuenta", role: .destructive) {
                 Task { await deleteAccount() }
             }

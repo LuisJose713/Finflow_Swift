@@ -213,10 +213,14 @@ final class FinFlowUITests: XCTestCase {
         let remove = app.buttons["Eliminar mi cuenta definitivamente"]
         reveal(remove, in: app)
         tap(remove)
-        XCTAssertTrue(app.buttons["Sí, eliminar cuenta"].waitForExistence(timeout: 5))
+        let deletionAlert = app.alerts["¿Eliminar tu cuenta definitivamente?"]
+        XCTAssertTrue(deletionAlert.waitForExistence(timeout: 5))
+        XCTAssertTrue(deletionAlert.buttons["Sí, eliminar cuenta"].exists)
         capture(app, "account-deletion-confirmation")
-        app.buttons["Cancelar"].firstMatch.tap()
+        tap(deletionAlert.buttons["Cancelar"])
+        XCTAssertTrue(deletionAlert.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Eliminar mi cuenta definitivamente"].exists)
+        XCTAssertFalse(app.buttons["auth.submit"].exists, "Cancelling deletion must preserve the session")
     }
 
     func testDrawerSwipeAwayFromScreenEdge() {
