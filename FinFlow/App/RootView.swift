@@ -8,6 +8,7 @@ struct RootView: View {
     @State private var checkingSession = true
     @State private var showPrivacyNotice = false
     @State private var requirePrivacyConsent = false
+    @State private var privacyOwnerID: Int?
     @State private var privacyPolicy: PrivacyPolicy?
     @State private var privacyError: String?
 
@@ -28,35 +29,29 @@ struct RootView: View {
             } else if session.isAuthenticated {
                 if appLock.isLocked {
                     AppLockView()
-                } else {
+                } else if privacyOwnerID == nil || privacyOwnerID != session.user?.id {
                     ZStack {
-                        MainTabView(interactionEnabled: !showPrivacyNotice && !requirePrivacyConsent)
-                            .id("\(session.user?.id ?? 0)-\(currencyRevision)")
-                            .allowsHitTesting(!showPrivacyNotice && !requirePrivacyConsent)
-                            .accessibilityHidden(showPrivacyNotice || requirePrivacyConsent)
-
-                        // Keep privacy in the authenticated screen's layout.
-                        // Presenting a UIKit cover during the AutoFill/login
-                        // transition could leave a visible CTA with no hit point
-                        // and expose the underlying tab bar to accessibility.
-                        if requirePrivacyConsent {
-                            PrivacyConsentGateSheet(
-                                policy: privacyPolicy,
-                                errorMessage: privacyError,
-                                confirm: { marketing in await confirmPrivacyConsent(marketing: marketing) },
-                                retry: { await reloadPrivacyForActiveUser() },
-                                leave: { requirePrivacyConsent = false; session.logout() }
-                            )
-                            .accessibilityAddTraits(.isModal)
-                            .zIndex(1)
-                        } else if showPrivacyNotice {
-                            PrivacyNoticeSheet(policy: privacyPolicy) {
-                                acknowledgeNotice()
-                            }
-                            .accessibilityAddTraits(.isModal)
-                            .zIndex(1)
-                        }
+                        FinFlowTheme.background.ignoresSafeArea()
+                        ProgressView("Preparando tu cuenta…")
                     }
+                } else if requirePrivacyConsent {
+                    PrivacyConsentGateSheet(
+                        policy: privacyPolicy,
+                        errorMessage: privacyError,
+                        confirm: { marketing in await confirmPrivacyConsent(marketing: marketing) },
+                        retry: { await reloadPrivacyForActiveUser() },
+                        leave: { requirePrivacyConsent = false; session.logout() }
+                    )
+                } else if showPrivacyNotice {
+                    PrivacyNoticeSheet(policy: privacyPolicy) {
+                        acknowledgeNotice()
+                    }
+                } else {
+                    // Mount the financial UI only after this owner's privacy
+                    // decision is resolved. UIKit-backed tabs and global drawer
+                    // gestures must not exist behind a blocking privacy screen.
+                    MainTabView()
+                        .id("\(session.user?.id ?? 0)-\(currencyRevision)")
                 }
             } else {
                 AuthView()
@@ -67,14 +62,21 @@ struct RootView: View {
             checkingSession = false
         }
         .onChange(of: session.isAuthenticated) { wasAuthenticated, authenticated in
-            if wasAuthenticated && !authenticated { navigation.clear() }
+            if wasAuthenticated && !authenticated {
+                navigation.clear()
+                privacyOwnerID = nil
+            }
         }
         .task(id: session.user?.id) {
             appLock.prepare(ownerID: session.user?.id)
             if let currentUser = session.user, session.isAuthenticated {
                 await appLock.unlock(automatically: true)
                 await refreshPrivacy(userID: currentUser.id)
+                guard !Task.isCancelled, session.isAuthenticated,
+                      session.user?.id == currentUser.id else { return }
+                privacyOwnerID = currentUser.id
             } else {
+                privacyOwnerID = nil
                 showPrivacyNotice = false
                 requirePrivacyConsent = false
                 privacyPolicy = nil
@@ -188,7 +190,6 @@ struct RootView: View {
 /// iPhone keeps the native four-tab shortcuts and gains an optional edge-swipe
 /// navigation drawer. iPad keeps Apple's adaptive sidebar.
 struct MainTabView: View {
-    var interactionEnabled = true
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var navigation: AppNavigationStore
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -239,7 +240,7 @@ struct MainTabView: View {
             }
             .background {
                 DrawerPanGesture(
-                    enabled: interactionEnabled && sizeClass == .compact && detail == nil,
+                    enabled: sizeClass == .compact && detail == nil,
                     isOpen: drawerOpen,
                     drawerWidth: width,
                     changed: { offset in
@@ -252,9 +253,6 @@ struct MainTabView: View {
                 )
             }
             .onChange(of: sizeClass) { _, _ in setDrawer(false) }
-            .onChange(of: interactionEnabled) { _, enabled in
-                if !enabled { setDrawer(false) }
-            }
             .onChange(of: navigation.pendingDestination) { _, _ in openNotificationDestination() }
             .onAppear { openNotificationDestination() }
             .overlay(alignment: .topLeading) {
