@@ -7,6 +7,7 @@ struct BudgetsView: View {
     @State private var year = Calendar.current.component(.year, from: .now)
     @State private var month = Calendar.current.component(.month, from: .now)
     @State private var loading = true
+    @State private var refreshState = FinanceRefreshState()
     @State private var error: String?
     @State private var showingEditor = false
     @State private var editing: BudgetOverview?
@@ -76,7 +77,7 @@ struct BudgetsView: View {
                 }
             }
             .task { await load() }
-            .financeLiveSync { await load(silent: true) }
+            .financeLiveSync(enabled: !showingEditor && deleting == nil) { await load(silent: true) }
             .onChange(of: month) { _, _ in Task { await load() } }
             .onChange(of: year) { _, _ in Task { await load() } }
             .sheet(isPresented: $showingEditor, onDismiss: { Task { await load() } }) {
@@ -159,20 +160,22 @@ struct BudgetsView: View {
         }
     }
 
-    private func load(silent: Bool = false) async {
+    @MainActor private func load(silent: Bool = false) async {
+        guard let request = refreshState.begin(silent: silent) else { return }
         if !silent { loading = true }
-        defer { if !silent { loading = false } }
+        defer { if refreshState.finish(request) { loading = false } }
         do {
-            async let remoteBudgets: [BudgetOverview] = APIClient.shared.request(
-                "/budgets", query: ["year": String(year), "month": String(month)])
-            async let remoteCategories: [FinanceCategory] = APIClient.shared.request("/categories")
-            let loadedBudgets = try await remoteBudgets
-            let loadedCategories = try await remoteCategories
-            budgets = loadedBudgets
-            categories = loadedCategories
+            let query = ["year": String(year), "month": String(month)]
+            async let a: [BudgetOverview] = APIClient.shared.request("/budgets", query: query)
+            async let b: [FinanceCategory] = APIClient.shared.request("/categories")
+            let snapshot = try await (a, b)
+            guard !Task.isCancelled, refreshState.accepts(request) else { return }
+            budgets = snapshot.0
+            categories = snapshot.1
             error = nil
         } catch {
-            self.error = error.localizedDescription
+            guard !Task.isCancelled, refreshState.accepts(request) else { return }
+            if !silent { self.error = error.localizedDescription }
         }
     }
 
@@ -250,6 +253,7 @@ struct BudgetEditor: View {
     }
 
     private func save() async {
+        guard !isSaving else { return }
         guard categoryID != 0,
               let parsed = Double(amount.replacingOccurrences(of: ",", with: ".")),
               parsed.isFinite, parsed > 0, parsed <= 999_999_999_999.99 else {

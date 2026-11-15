@@ -3,6 +3,7 @@ import SwiftUI
 struct GoalsView: View {
     @State private var goals: [FinanceGoal] = []
     @State private var isLoading = true
+    @State private var refreshState = FinanceRefreshState()
     @State private var error: String?
     @State private var showingForm = false
     @State private var editingGoal: FinanceGoal?
@@ -28,7 +29,7 @@ struct GoalsView: View {
             .navigationTitle("Metas financieras")
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { editingGoal = nil; showingForm = true } label: { Image(systemName: "plus.circle.fill") }.accessibilityLabel("Nueva meta").accessibilityIdentifier("goals.add") } }
             .task { await load() }
-            .financeLiveSync { await load(silent: true) }
+            .financeLiveSync(enabled: !showingForm && fundingGoal == nil && deletingGoal == nil && !isFunding) { await load(silent: true) }
             .sheet(isPresented: $showingForm, onDismiss: { Task { await load() } }) { GoalFormView(goal: editingGoal) }
             .sheet(item: $historyGoal) { goal in GoalHistoryView(goal: goal) }
             .confirmationDialog("¿Eliminar esta meta y su historial?", isPresented: Binding(
@@ -73,10 +74,23 @@ struct GoalsView: View {
             if let description = goal.description, !description.isEmpty { Text(description).font(.caption).foregroundStyle(FinFlowTheme.secondaryText) }
         }
     }
-    private func load(silent: Bool = false) async { if !silent { isLoading = true }
-        defer { if !silent { isLoading = false } }; do { goals = try await APIClient.shared.request("/goals"); error = nil } catch { if !silent { self.error = error.localizedDescription } } }
+    @MainActor private func load(silent: Bool = false) async {
+        guard let request = refreshState.begin(silent: silent) else { return }
+        if !silent { isLoading = true }
+        defer { if refreshState.finish(request) { isLoading = false } }
+        do {
+            let snapshot: [FinanceGoal] = try await APIClient.shared.request("/goals")
+            guard !Task.isCancelled, refreshState.accepts(request) else { return }
+            goals = snapshot
+            error = nil
+        } catch {
+            guard !Task.isCancelled, refreshState.accepts(request) else { return }
+            if !silent { self.error = error.localizedDescription }
+        }
+    }
+
     private func delete(_ goal: FinanceGoal) async {
-        do { try await APIClient.shared.perform("/goals/\(goal.id)", method: "DELETE"); goals.removeAll { $0.id == goal.id } } catch { self.error = error.localizedDescription }
+        do { try await APIClient.shared.perform("/goals/\(goal.id)", method: "DELETE"); refreshState.invalidate(); goals.removeAll { $0.id == goal.id } } catch { self.error = error.localizedDescription }
     }
     private func setStatus(_ goal: FinanceGoal, _ status: String) async {
         do {
@@ -85,9 +99,10 @@ struct GoalsView: View {
         } catch { self.error = error.localizedDescription }
     }
     private func addFunds() async {
+        guard !isFunding else { return }
         guard let goal = fundingGoal, goal.status == "active", let amount = Double(fundAmount.replacingOccurrences(of: ",", with: ".")), amount.isFinite, amount > 0, amount <= goal.targetAmount - goal.currentAmount else { error = "Ingresa un aporte válido que no supere el saldo pendiente."; fundingGoal = nil; return }
         isFunding = true; defer { isFunding = false }
-        do { let updated: FinanceGoal = try await APIClient.shared.request("/goals/\(goal.id)/contribute", method: "PATCH", body: AmountRequest(amount: amount)); if let index = goals.firstIndex(where: { $0.id == goal.id }) { goals[index] = updated }; fundingGoal = nil }
+        do { let updated: FinanceGoal = try await APIClient.shared.request("/goals/\(goal.id)/contribute", method: "PATCH", body: AmountRequest(amount: amount)); refreshState.invalidate(); if let index = goals.firstIndex(where: { $0.id == goal.id }) { goals[index] = updated }; fundingGoal = nil }
         catch { self.error = error.localizedDescription; fundingGoal = nil }
     }
 }
@@ -113,6 +128,7 @@ struct GoalFormView: View {
         }.onAppear { if let goal { name = goal.name; target = String(goal.targetAmount); current = String(goal.currentAmount); deadline = DateFormatters.parse(goal.deadline) ?? .now; description = goal.description ?? "" } }
     }
     private func save() async {
+        guard !isSaving else { return }
         guard name.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2, let targetValue = Double(target.replacingOccurrences(of: ",", with: ".")), targetValue.isFinite, targetValue > 0, let currentValue = Double(current.replacingOccurrences(of: ",", with: ".")), currentValue.isFinite, currentValue >= 0, currentValue <= targetValue, (goal == nil || targetValue >= (goal?.currentAmount ?? 0)) else { error = "Revisa el nombre y los montos de la meta."; return }
         isSaving = true; defer { isSaving = false }
         let dto = GoalRequest(title: name, targetAmount: targetValue, currentAmount: goal == nil ? currentValue : nil, deadline: DateFormatters.isoDay.string(from: deadline), description: description.isEmpty ? nil : description)

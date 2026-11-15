@@ -157,6 +157,30 @@ extension Notification.Name {
     static let finflowFinanceChanged = Notification.Name("finflow.financeChanged")
 }
 
+/// Background polling yields to an existing read. Explicit reloads supersede
+/// older snapshots, so a response started before a save cannot undo that save.
+struct FinanceRefreshState {
+    private var current: UUID?
+
+    mutating func begin(silent: Bool) -> UUID? {
+        if silent && current != nil { return nil }
+        let request = UUID()
+        current = request
+        return request
+    }
+
+    func accepts(_ request: UUID) -> Bool { current == request }
+
+    @discardableResult
+    mutating func finish(_ request: UUID) -> Bool {
+        guard accepts(request) else { return false }
+        current = nil
+        return true
+    }
+
+    mutating func invalidate() { current = nil }
+}
+
 private struct AnyEncodable: Encodable {
     private let encodeValue: (Encoder) throws -> Void
     init(_ value: Encodable) { encodeValue = value.encode }

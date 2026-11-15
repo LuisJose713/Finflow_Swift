@@ -6,6 +6,7 @@ struct CategoriesView: View {
     @EnvironmentObject private var session: SessionStore
     @State private var categories: [FinanceCategory] = []
     @State private var loading = true
+    @State private var refreshState = FinanceRefreshState()
     @State private var error: String?
     @State private var editing: FinanceCategory?
     @State private var showingEditor = false
@@ -46,7 +47,7 @@ struct CategoriesView: View {
             }
         }
         .task { await load() }
-            .financeLiveSync { await load(silent: true) }
+            .financeLiveSync(enabled: !showingEditor && deleting == nil) { await load(silent: true) }
         .sheet(isPresented: $showingEditor, onDismiss: { Task { await load() } }) {
             CategoryEditor(category: editing) { input in
                 if let editing {
@@ -110,14 +111,18 @@ struct CategoriesView: View {
         }
     }
 
-    private func load(silent: Bool = false) async {
+    @MainActor private func load(silent: Bool = false) async {
+        guard let request = refreshState.begin(silent: silent) else { return }
         if !silent { loading = true }
-        defer { if !silent { loading = false } }
+        defer { if refreshState.finish(request) { loading = false } }
         do {
-            categories = try await APIClient.shared.request("/categories")
+            let snapshot: [FinanceCategory] = try await APIClient.shared.request("/categories")
+            guard !Task.isCancelled, refreshState.accepts(request) else { return }
+            categories = snapshot
             error = nil
         } catch {
-            self.error = error.localizedDescription
+            guard !Task.isCancelled, refreshState.accepts(request) else { return }
+            if !silent { self.error = error.localizedDescription }
         }
     }
 
@@ -125,6 +130,7 @@ struct CategoriesView: View {
         guard category.userId == session.user?.id else { return }
         do {
             try await APIClient.shared.perform("/categories/\(category.id)", method: "DELETE")
+            refreshState.invalidate()
             categories.removeAll { $0.id == category.id }
             deleting = nil
         } catch {
@@ -184,6 +190,7 @@ struct CategoryEditor: View {
     }
 
     private func save() async {
+        guard !isSaving else { return }
         let cleaned = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard (2...80).contains(cleaned.count) else {
             error = "El nombre debe tener entre 2 y 80 caracteres."

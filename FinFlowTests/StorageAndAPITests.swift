@@ -2,6 +2,34 @@ import XCTest
 @testable import FinFlow
 
 final class StorageAndAPITests: XCTestCase {
+    func testManualReloadSupersedesAnOlderBackgroundSnapshot() throws {
+        var refresh = FinanceRefreshState()
+        let oldRead = try XCTUnwrap(refresh.begin(silent: true))
+        let afterSave = try XCTUnwrap(refresh.begin(silent: false))
+        XCTAssertFalse(refresh.accepts(oldRead))
+        XCTAssertFalse(refresh.finish(oldRead))
+        XCTAssertTrue(refresh.accepts(afterSave))
+        XCTAssertTrue(refresh.finish(afterSave))
+    }
+
+    func testBackgroundPollingDoesNotOverlapAnActiveRead() throws {
+        var refresh = FinanceRefreshState()
+        let first = try XCTUnwrap(refresh.begin(silent: false))
+        XCTAssertNil(refresh.begin(silent: true))
+        XCTAssertTrue(refresh.accepts(first))
+        refresh.finish(first)
+        XCTAssertNotNil(refresh.begin(silent: true))
+    }
+
+    func testConfirmedMutationRejectsAPreviousSnapshot() throws {
+        var refresh = FinanceRefreshState()
+        let oldRead = try XCTUnwrap(refresh.begin(silent: true))
+        refresh.invalidate()
+        XCTAssertFalse(refresh.accepts(oldRead))
+        XCTAssertFalse(refresh.finish(oldRead))
+        XCTAssertNotNil(refresh.begin(silent: true))
+    }
+
     func testDisplayCurrencyDoesNotChangeOriginalCOP() throws {
         let original = 100_000.0
         XCTAssertEqual(try XCTUnwrap(CurrencyFormatter.convertedAmountFromCOP(original, rate: 0.00025)), 25, accuracy: 0.001)

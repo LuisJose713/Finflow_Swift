@@ -14,7 +14,7 @@ struct TransactionsView: View {
     @State private var selectedCategory = 0
     @State private var error: String?
     @State private var isLoading = true
-    @State private var requestInFlight = false
+    @State private var refreshState = FinanceRefreshState()
     @State private var showingCreate = false
     @State private var editingTransaction: FinanceTransaction?
     @State private var deletingTransaction: FinanceTransaction?
@@ -92,7 +92,7 @@ struct TransactionsView: View {
                 ToolbarItem(placement: .topBarTrailing) { Button { showingCreate = true } label: { Image(systemName: "plus.circle.fill") }.accessibilityLabel("Nuevo movimiento").accessibilityIdentifier("transactions.add") }
             }
             .task { await load() }
-            .financeLiveSync { await load(silent: true) }
+            .financeLiveSync(enabled: !showingCreate && editingTransaction == nil && deletingTransaction == nil && !showingShare) { await load(silent: true) }
             .onReceive(NotificationCenter.default.publisher(for: .finflowFinanceChanged).receive(on: RunLoop.main)) { _ in
                 Task { await load() }
             }
@@ -150,10 +150,10 @@ struct TransactionsView: View {
 
     private var yearOptions: [Int] { Array(Set(transactions.map { Calendar.current.component(.year, from: $0.parsedDate) })).sorted(by: >) }
     @MainActor private func load(silent: Bool = false) async {
-        guard !requestInFlight, let userID = session.user?.id else { return }
-        requestInFlight = true
+        guard let userID = session.user?.id,
+              let request = refreshState.begin(silent: silent) else { return }
         if !silent { isLoading = true }
-        defer { if !silent { isLoading = false }; requestInFlight = false }
+        defer { if refreshState.finish(request) { isLoading = false } }
         do {
             async let remote: [FinanceTransaction] = APIClient.shared.request("/transactions")
             async let cats: [FinanceCategory] = APIClient.shared.request("/categories")
@@ -161,7 +161,7 @@ struct TransactionsView: View {
             let server = try await remote
             let loadedCategories = try await cats
             let loadedAccounts = (try? await wallets) ?? []
-            guard !Task.isCancelled, session.user?.id == userID else { return }
+            guard !Task.isCancelled, refreshState.accepts(request), session.user?.id == userID else { return }
             categories = loadedCategories
             accounts = loadedAccounts
             transactions = server
@@ -174,7 +174,7 @@ struct TransactionsView: View {
                 ? "Hay operaciones pendientes de una versión anterior. Por seguridad no se reenviarán automáticamente: comprueba los registros antes de introducirlos otra vez."
                 : nil
         } catch {
-            guard !Task.isCancelled, session.user?.id == userID else { return }
+            guard !Task.isCancelled, refreshState.accepts(request), session.user?.id == userID else { return }
             transactions = OfflineTransactionStore.shared.cachedTransactions(userID: userID)
                 .filter { $0.id > 0 }
             self.error = transactions.isEmpty

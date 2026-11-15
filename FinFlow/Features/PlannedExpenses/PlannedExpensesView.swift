@@ -9,6 +9,7 @@ struct PlannedExpensesView: View {
     @State private var executeTarget: PlannedExpense?
     @State private var deleteTarget: PlannedExpense?
     @State private var isLoading = true
+    @State private var refreshState = FinanceRefreshState()
     @State private var error: String?
     @State private var isWorking = false
 
@@ -45,7 +46,7 @@ struct PlannedExpensesView: View {
             .navigationTitle("Gastos planificados")
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { editing = nil; showingForm = true } label: { Image(systemName: "plus.circle.fill") } } }
             .task { await load() }
-            .financeLiveSync { await load(silent: true) }
+            .financeLiveSync(enabled: !showingForm && !isWorking && executeTarget == nil && deleteTarget == nil) { await load(silent: true) }
             .sheet(isPresented: $showingForm, onDismiss: { Task { await load() } }) {
                 PlannedExpenseForm(expense: editing, categories: categories) { request in
                     try await save(request, editing: editing)
@@ -102,16 +103,22 @@ struct PlannedExpensesView: View {
     private func statusLabel(_ status: String) -> String { ["pending":"Pendiente", "done":"Ejecutado", "cancelled":"Cancelado"][status] ?? status }
     private func statusColor(_ status: String) -> Color { status == "done" ? FinFlowTheme.mint : status == "cancelled" ? FinFlowTheme.secondaryText : FinFlowTheme.accent }
 
-    private func load(silent: Bool = false) async {
+    @MainActor private func load(silent: Bool = false) async {
+        guard let request = refreshState.begin(silent: silent) else { return }
         if !silent { isLoading = true }
-        defer { if !silent { isLoading = false } }
+        defer { if refreshState.finish(request) { isLoading = false } }
         do {
-            async let loadedExpenses: [PlannedExpense] = APIClient.shared.request("/planned-expenses")
-            async let loadedCategories: [FinanceCategory] = APIClient.shared.request("/categories")
-            expenses = try await loadedExpenses
-            categories = (try? await loadedCategories) ?? []
+            async let a: [PlannedExpense] = APIClient.shared.request("/planned-expenses")
+            async let b: [FinanceCategory] = APIClient.shared.request("/categories")
+            let snapshot = try await (a, b)
+            guard !Task.isCancelled, refreshState.accepts(request) else { return }
+            expenses = snapshot.0
+            categories = snapshot.1
             error = nil
-        } catch { if !silent { self.error = error.localizedDescription } }
+        } catch {
+            guard !Task.isCancelled, refreshState.accepts(request) else { return }
+            if !silent { self.error = error.localizedDescription }
+        }
     }
 
     private func save(_ request: PlannedExpenseRequest, editing: PlannedExpense?) async throws {

@@ -6,6 +6,7 @@ struct RecurringView: View {
     @State private var accounts: [FinancialAccount] = []
     @State private var loading = true
     @State private var working = false
+    @State private var refreshState = FinanceRefreshState()
     @State private var error: String?
     @State private var information: String?
     @State private var showEditor = false
@@ -79,7 +80,7 @@ struct RecurringView: View {
             }
         }
         .task { await load() }
-            .financeLiveSync { await load(silent: true) }
+            .financeLiveSync(enabled: !showEditor && !working && ruleToDelete == nil && !confirmRun) { await load(silent: true) }
         .sheet(isPresented: $showEditor, onDismiss: { Task { await load() } }) {
             RecurringEditor(categories: categories, accounts: accounts) { value in
                 let _: RecurringRule = try await APIClient.shared.request(
@@ -105,19 +106,26 @@ struct RecurringView: View {
         }
     }
 
-    private func load(silent: Bool = false) async {
+    @MainActor private func load(silent: Bool = false) async {
+        guard let request = refreshState.begin(silent: silent) else { return }
         if !silent { loading = true }
-        defer { if !silent { loading = false } }
+        defer { if refreshState.finish(request) { loading = false } }
         do {
             async let a: [RecurringRule] = APIClient.shared.request("/recurring")
             async let b: [FinanceCategory] = APIClient.shared.request("/categories")
             async let c: [FinancialAccount] = APIClient.shared.request("/accounts")
-            rules = try await a
-            categories = try await b
-            accounts = try await c
+            let snapshot = try await (a, b, c)
+            guard !Task.isCancelled, refreshState.accepts(request) else { return }
+            rules = snapshot.0
+            categories = snapshot.1
+            accounts = snapshot.2
             error = nil
-        } catch { if !silent { self.error = error.localizedDescription } }
+        } catch {
+            guard !Task.isCancelled, refreshState.accepts(request) else { return }
+            if !silent { self.error = error.localizedDescription }
+        }
     }
+
     private func toggle(_ rule: RecurringRule) async {
         working = true
         defer { working = false }
@@ -217,6 +225,7 @@ struct RecurringEditor: View {
     }
 
     private func save() async {
+        guard !isSaving else { return }
         let cleaned = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard (2...120).contains(cleaned.count),
               availableCategories.contains(where: { $0.id == categoryID }),

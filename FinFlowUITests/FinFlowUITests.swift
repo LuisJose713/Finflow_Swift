@@ -58,22 +58,21 @@ final class FinFlowUITests: XCTestCase {
         let labels = NSPredicate(format: "label IN %@", ["Not Now", "Ahora no", "No guardar"])
         let owners = [app, XCUIApplication(bundleIdentifier: "com.apple.springboard")]
         let buttons = owners.map { $0.buttons.matching(labels) }
-        // Inspect all matching buttons: an inaccessible remote placeholder
-        // can precede the visible credential-provider button in the tree.
-        let visible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            buttons.contains { query in
-                query.allElementsBoundByIndex.contains { $0.exists && $0.isHittable }
+        // AX queries have their own waiters. Running them inside a predicate
+        // waiter let its timeout interrupt a remote credential-provider query
+        // and fail an otherwise valid login. Let each query finish before
+        // checking the deadline; keep handling the actual system prompt.
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            for query in buttons {
+                if let decline = query.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable }) {
+                    decline.tap()
+                    XCTAssertTrue(decline.waitForNonExistence(timeout: 8), "The password-saving prompt must close")
+                    return
+                }
             }
-        }, object: nil)
-        guard XCTWaiter.wait(for: [visible], timeout: timeout) == .completed else { return }
-        for query in buttons {
-            if let decline = query.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable }) {
-                decline.tap()
-                XCTAssertTrue(decline.waitForNonExistence(timeout: 8), "The password-saving prompt must close")
-                return
-            }
-        }
-        XCTFail("The visible password-saving prompt disappeared before it could be dismissed")
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        } while Date() < deadline
     }
 
     private func tap(_ element: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {

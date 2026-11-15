@@ -8,7 +8,7 @@ struct DashboardView: View {
     @State private var recentCount = 5
     @State private var isLoading = true
     @State private var lastUpdated: Date?
-    @State private var requestInFlight = false
+    @State private var refreshState = FinanceRefreshState()
     @State private var error: String?
     @State private var hideAmounts = false
     @State private var preparingEntry = false
@@ -84,9 +84,9 @@ struct DashboardView: View {
                 }
             }
             .task { await load() }
-            .financeLiveSync { await load(silent: true) }
+            .financeLiveSync(enabled: draft == nil && !preparingEntry) { await load(silent: true) }
             .onReceive(NotificationCenter.default.publisher(for: .finflowFinanceChanged).receive(on: RunLoop.main)) { _ in
-                Task { await load() }
+                Task { await load(silent: true) }
             }
             .sheet(item: $draft, onDismiss: { Task { await load() } }) { kind in
                 CreateTransactionView(categories: entryCategories, accounts: entryAccounts,
@@ -287,23 +287,23 @@ struct DashboardView: View {
     }
 
     @MainActor private func load(silent: Bool = false) async {
-        guard !requestInFlight, let owner = session.user?.id else { return }
-        requestInFlight = true
+        guard let owner = session.user?.id,
+              let request = refreshState.begin(silent: silent) else { return }
         if !silent { isLoading = true }
-        defer { if !silent { isLoading = false }; requestInFlight = false }
+        defer { if refreshState.finish(request) { isLoading = false } }
         do {
             async let loadedStats: TransactionStats = APIClient.shared.request("/transactions/stats")
             async let loadedTransactions: [FinanceTransaction] = APIClient.shared.request("/transactions")
             // Keep the previous snapshot until both requests succeed. A partial
             // refresh must not pair new totals with stale movements.
             let snapshot = try await (loadedStats, loadedTransactions)
-            guard !Task.isCancelled, session.user?.id == owner else { return }
+            guard !Task.isCancelled, refreshState.accepts(request), session.user?.id == owner else { return }
             stats = snapshot.0
             transactions = snapshot.1
             lastUpdated = .now
             error = nil
         } catch {
-            guard !Task.isCancelled, session.user?.id == owner else { return }
+            guard !Task.isCancelled, refreshState.accepts(request), session.user?.id == owner else { return }
             self.error = lastUpdated == nil
                 ? "No pudimos consultar tus finanzas. Revisa tu conexión e inténtalo de nuevo."
                 : "No pudimos actualizar tus finanzas. Se conserva el último resumen cargado."

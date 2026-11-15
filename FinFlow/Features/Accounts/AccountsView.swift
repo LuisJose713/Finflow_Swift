@@ -4,6 +4,7 @@ struct AccountsView: View {
     @State private var accounts: [FinancialAccount] = []
     @State private var transfers: [FinancialTransfer] = []
     @State private var loading = true
+    @State private var refreshState = FinanceRefreshState()
     @State private var error: String?
     @State private var editing: FinancialAccount?
     @State private var showAccountEditor = false
@@ -92,7 +93,7 @@ struct AccountsView: View {
             }
         }
         .task { await load() }
-            .financeLiveSync { await load(silent: true) }
+            .financeLiveSync(enabled: !showAccountEditor && !showTransferEditor && archiving == nil) { await load(silent: true) }
         .sheet(isPresented: $showAccountEditor, onDismiss: { Task { await load() } }) {
             FinancialAccountEditor(account: editing) { name, type, opening in
                 if let editing {
@@ -129,17 +130,24 @@ struct AccountsView: View {
     }
     private func name(_ id: Int) -> String { accounts.first { $0.id == id }?.name ?? "Cuenta \(id)" }
 
-    private func load(silent: Bool = false) async {
+    @MainActor private func load(silent: Bool = false) async {
+        guard let request = refreshState.begin(silent: silent) else { return }
         if !silent { loading = true }
-        defer { if !silent { loading = false } }
+        defer { if refreshState.finish(request) { loading = false } }
         do {
-            async let loadedAccounts: [FinancialAccount] = APIClient.shared.request("/accounts")
-            async let loadedTransfers: [FinancialTransfer] = APIClient.shared.request("/accounts/transfers")
-            accounts = try await loadedAccounts
-            transfers = try await loadedTransfers
+            async let a: [FinancialAccount] = APIClient.shared.request("/accounts")
+            async let b: [FinancialTransfer] = APIClient.shared.request("/accounts/transfers")
+            let snapshot = try await (a, b)
+            guard !Task.isCancelled, refreshState.accepts(request) else { return }
+            accounts = snapshot.0
+            transfers = snapshot.1
             error = nil
-        } catch { if !silent { self.error = error.localizedDescription } }
+        } catch {
+            guard !Task.isCancelled, refreshState.accepts(request) else { return }
+            if !silent { self.error = error.localizedDescription }
+        }
     }
+
     private func archive(_ account: FinancialAccount) async {
         defer { archiving = nil }
         do {
@@ -203,6 +211,7 @@ struct FinancialAccountEditor: View {
         }
     }
     private func save() async {
+        guard !isSaving else { return }
         let cleaned = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard (2...80).contains(cleaned.count),
               let amount = Double(openingBalance.replacingOccurrences(of: ",", with: ".")),
@@ -266,6 +275,7 @@ struct FinancialTransferEditor: View {
     }
 
     private func save() async {
+        guard !isSaving else { return }
         guard fromID > 0, toID > 0, fromID != toID,
               let value = Double(amount.replacingOccurrences(of: ",", with: ".")),
               value.isFinite, value > 0,
