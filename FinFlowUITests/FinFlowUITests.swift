@@ -94,6 +94,19 @@ final class FinFlowUITests: XCTestCase {
         XCTAssertTrue(element.isHittable, "Control must be reachable by scrolling: \(element)")
     }
 
+    private func selectChartStyle(_ label: String, in app: XCUIApplication) {
+        let picker = app.segmentedControls["dashboard.chartStyle"]
+        reveal(picker, in: app)
+        // iOS can expose a segment with an infinite AX frame after scrolling,
+        // although the segmented control is visibly laid out. Send the real
+        // touch through the control's finite frame and verify the selection.
+        let frame = picker.frame
+        XCTAssertTrue(frame.minX.isFinite && frame.minY.isFinite && frame.width > 0 && frame.height > 0)
+        XCTAssertTrue(app.frame.contains(CGPoint(x: frame.midX, y: frame.midY)))
+        picker.coordinate(withNormalizedOffset: CGVector(dx: label == "Lineal" ? 0.25 : 0.75, dy: 0.5)).tap()
+        XCTAssertTrue(picker.buttons[label].isSelected, "The chart style must actually change")
+    }
+
     private func dismissKeyboard(in app: XCUIApplication) {
         if app.keyboards.firstMatch.exists {
             tap(app.buttons["Listo"].firstMatch)
@@ -141,16 +154,14 @@ final class FinFlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["dashboard.balance"].waitForExistence(timeout: 10))
         capture(app, "03-dashboard")
         let picker = app.segmentedControls["dashboard.chartStyle"]
-        let linear = picker.buttons["Lineal"]
         let circular = picker.buttons["Circular"]
         reveal(picker, in: app)
         XCTAssertTrue(picker.exists)
         XCTAssertTrue(circular.isSelected, "Circular must be the initial financial chart")
-        tap(linear)
+        selectChartStyle("Lineal", in: app)
         XCTAssertTrue(app.staticTexts["dashboard.selectedMonth"].waitForExistence(timeout: 8))
         capture(app, "04-line-chart")
-        reveal(picker, in: app)
-        tap(circular)
+        selectChartStyle("Circular", in: app)
         let expense = app.buttons["dashboard.slice.expense"]
         reveal(expense, in: app)
         tap(expense)
