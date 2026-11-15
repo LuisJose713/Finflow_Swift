@@ -76,9 +76,11 @@ final class FinFlowUITests: XCTestCase {
     }
 
     private func tap(_ element: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
-        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true AND hittable == true"), object: element)
-        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 8), .completed,
-                       "Control must be visible and interactive: \(element)", file: file, line: line)
+        // Let XCTest resolve the current activation point during the tap.
+        // A surrounding predicate waiter could interrupt AX resolution while
+        // a live refresh replaces a native segmented-control snapshot.
+        XCTAssertTrue(element.waitForExistence(timeout: 8),
+                      "Control must exist before interaction: \(element)", file: file, line: line)
         element.tap()
     }
 
@@ -137,10 +139,15 @@ final class FinFlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["dashboard.balance"].waitForExistence(timeout: 10))
         capture(app, "03-dashboard")
         let picker = app.segmentedControls["dashboard.chartStyle"]
+        let linear = picker.buttons["Lineal"]
         let circular = picker.buttons["Circular"]
-        reveal(circular, in: app)
+        reveal(picker, in: app)
         XCTAssertTrue(picker.exists)
+        XCTAssertTrue(circular.isSelected, "Circular must be the initial financial chart")
+        tap(linear)
+        XCTAssertTrue(app.staticTexts["dashboard.selectedMonth"].waitForExistence(timeout: 8))
         capture(app, "04-line-chart")
+        reveal(picker, in: app)
         tap(circular)
         let expense = app.buttons["dashboard.slice.expense"]
         reveal(expense, in: app)

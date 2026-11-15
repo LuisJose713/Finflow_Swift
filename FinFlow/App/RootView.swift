@@ -29,25 +29,33 @@ struct RootView: View {
                 if appLock.isLocked {
                     AppLockView()
                 } else {
-                    MainTabView()
-                    .id("\(session.user?.id ?? 0)-\(currencyRevision)")
-                    // A full-screen notice prevents the adaptive iPad sheet and
-                    // a lingering keyboard/AutoFill overlay from hiding its CTA.
-                    .fullScreenCover(isPresented: $showPrivacyNotice) {
-                        PrivacyNoticeSheet(policy: privacyPolicy) {
-                            acknowledgeNotice()
+                    ZStack {
+                        MainTabView()
+                            .id("\(session.user?.id ?? 0)-\(currencyRevision)")
+                            .allowsHitTesting(!showPrivacyNotice && !requirePrivacyConsent)
+                            .accessibilityHidden(showPrivacyNotice || requirePrivacyConsent)
+
+                        // Keep privacy in the authenticated screen's layout.
+                        // Presenting a UIKit cover during the AutoFill/login
+                        // transition could leave a visible CTA with no hit point
+                        // and expose the underlying tab bar to accessibility.
+                        if requirePrivacyConsent {
+                            PrivacyConsentGateSheet(
+                                policy: privacyPolicy,
+                                errorMessage: privacyError,
+                                confirm: { marketing in await confirmPrivacyConsent(marketing: marketing) },
+                                retry: { await reloadPrivacyForActiveUser() },
+                                leave: { requirePrivacyConsent = false; session.logout() }
+                            )
+                            .accessibilityAddTraits(.isModal)
+                            .zIndex(1)
+                        } else if showPrivacyNotice {
+                            PrivacyNoticeSheet(policy: privacyPolicy) {
+                                acknowledgeNotice()
+                            }
+                            .accessibilityAddTraits(.isModal)
+                            .zIndex(1)
                         }
-                        .interactiveDismissDisabled()
-                    }
-                    .fullScreenCover(isPresented: $requirePrivacyConsent) {
-                        PrivacyConsentGateSheet(
-                            policy: privacyPolicy,
-                            errorMessage: privacyError,
-                            confirm: { marketing in await confirmPrivacyConsent(marketing: marketing) },
-                            retry: { await reloadPrivacyForActiveUser() },
-                            leave: { requirePrivacyConsent = false; session.logout() }
-                        )
-                        .interactiveDismissDisabled()
                     }
                 }
             } else {
