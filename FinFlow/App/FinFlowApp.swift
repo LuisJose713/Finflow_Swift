@@ -210,9 +210,9 @@ enum FinFlowDailyReminders {
 // Siri and Shortcuts open an editable movement draft; they NEVER send a POST.
 // The authenticated FinFlow UI and device lock remain the only save entrypoint.
 struct RegisterFinFlowExpenseIntent: AppIntent {
-    static var title: LocalizedStringResource = "Registrar gasto en FinFlow"
-    static var description = IntentDescription("Abre FinFlow para revisar y confirmar un gasto.")
-    static var openAppWhenRun: Bool = true
+    static let title: LocalizedStringResource = "Registrar gasto en FinFlow"
+    static let description = IntentDescription("Abre FinFlow para revisar y confirmar un gasto.")
+    static let openAppWhenRun: Bool = true
 
     @Parameter(title: "Título del gasto")
     var concept: String?
@@ -233,9 +233,9 @@ struct RegisterFinFlowExpenseIntent: AppIntent {
 }
 
 struct RegisterFinFlowIncomeIntent: AppIntent {
-    static var title: LocalizedStringResource = "Registrar ingreso en FinFlow"
-    static var description = IntentDescription("Abre FinFlow para revisar y confirmar un ingreso.")
-    static var openAppWhenRun: Bool = true
+    static let title: LocalizedStringResource = "Registrar ingreso en FinFlow"
+    static let description = IntentDescription("Abre FinFlow para revisar y confirmar un ingreso.")
+    static let openAppWhenRun: Bool = true
 
     @Parameter(title: "Título del ingreso")
     var concept: String?
