@@ -253,7 +253,7 @@ struct BudgetEditor: View {
     }
 
     private func save() async {
-        guard !isSaving else { return }
+        guard !saving else { return }
         guard categoryID != 0,
               let parsed = Double(amount.replacingOccurrences(of: ",", with: ".")),
               parsed.isFinite, parsed > 0, parsed <= 999_999_999_999.99 else {

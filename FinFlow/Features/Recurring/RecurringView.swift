@@ -225,7 +225,7 @@ struct RecurringEditor: View {
     }
 
     private func save() async {
-        guard !isSaving else { return }
+        guard !saving else { return }
         let cleaned = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard (2...120).contains(cleaned.count),
               availableCategories.contains(where: { $0.id == categoryID }),

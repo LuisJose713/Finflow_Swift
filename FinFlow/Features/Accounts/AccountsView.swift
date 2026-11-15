@@ -211,7 +211,7 @@ struct FinancialAccountEditor: View {
         }
     }
     private func save() async {
-        guard !isSaving else { return }
+        guard !saving else { return }
         let cleaned = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard (2...80).contains(cleaned.count),
               let amount = Double(openingBalance.replacingOccurrences(of: ",", with: ".")),
@@ -275,7 +275,7 @@ struct FinancialTransferEditor: View {
     }
 
     private func save() async {
-        guard !isSaving else { return }
+        guard !saving else { return }
         guard fromID > 0, toID > 0, fromID != toID,
               let value = Double(amount.replacingOccurrences(of: ",", with: ".")),
               value.isFinite, value > 0,

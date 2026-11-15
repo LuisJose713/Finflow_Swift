@@ -190,7 +190,7 @@ struct CategoryEditor: View {
     }
 
     private func save() async {
-        guard !isSaving else { return }
+        guard !saving else { return }
         let cleaned = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard (2...80).contains(cleaned.count) else {
             error = "El nombre debe tener entre 2 y 80 caracteres."
