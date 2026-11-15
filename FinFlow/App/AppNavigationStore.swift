@@ -54,7 +54,7 @@ enum VoiceTransactionRegistration {
         var summary: String {
             let kind = request.type == "income" ? "ingreso" : "gasto"
             let money = request.amount.formatted(.currency(code: "COP").locale(Locale(identifier: "es_CO")))
-            return "¿Confirmas registrar un \\(kind) de \\(money) por \\(request.description) en \\(categoryName)?"
+            return "¿Confirmas registrar un \(kind) de \(money) por \(request.description) en \(categoryName)?"
         }
     }
 
@@ -86,7 +86,7 @@ enum VoiceTransactionRegistration {
             item.type.lowercased() == type && normalized(item.name) == normalized(cleanedCategory)
         }
         guard matching.count == 1, let category = matching.first else {
-            throw APIError.server("No encontramos una categoría única llamada \\(cleanedCategory). Revisa tus categorías en FinFlow.")
+            throw APIError.server("No encontramos una categoría única llamada \(cleanedCategory). Revisa tus categorías en FinFlow.")
         }
         let request = CreateTransactionRequest(
             description: cleanedTitle, amount: amount, type: type,
