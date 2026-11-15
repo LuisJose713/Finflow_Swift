@@ -53,7 +53,7 @@ enum VoiceTransactionRegistration {
 
         var summary: String {
             let kind = request.type == "income" ? "ingreso" : "gasto"
-            let money = request.amount.formatted(.currency(code: "COP").locale(Locale(identifier: "es_CO")))
+            let money = request.amount.formatted(.currency(code: "COP").locale(Locale(identifier: "es_ES")))
             return "¿Confirmas registrar un \(kind) de \(money) por \(request.description) en \(categoryName)?"
         }
     }
@@ -80,7 +80,7 @@ enum VoiceTransactionRegistration {
         func normalized(_ text: String) -> String {
             text.trimmingCharacters(in: .whitespacesAndNewlines)
                 .folding(options: [.caseInsensitive, .diacriticInsensitive],
-                         locale: Locale(identifier: "es_CO"))
+                         locale: Locale(identifier: "es_ES"))
         }
         let matching = categories.filter { item in
             item.type.lowercased() == type && normalized(item.name) == normalized(cleanedCategory)
