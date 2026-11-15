@@ -4,6 +4,7 @@ struct RootView: View {
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var appLock: AppLockStore
     @EnvironmentObject private var navigation: AppNavigationStore
+    @AppStorage("finflow.displayCurrency.revision") private var currencyRevision = 0
     @State private var checkingSession = true
     @State private var showPrivacyNotice = false
     @State private var requirePrivacyConsent = false
@@ -29,7 +30,7 @@ struct RootView: View {
                     AppLockView()
                 } else {
                     MainTabView()
-                    .id(session.user?.id)
+                    .id("\(session.user?.id ?? 0)-\(currencyRevision)")
                     // A full-screen notice prevents the adaptive iPad sheet and
                     // a lingering keyboard/AutoFill overlay from hiding its CTA.
                     .fullScreenCover(isPresented: $showPrivacyNotice) {

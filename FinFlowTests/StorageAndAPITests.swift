@@ -2,6 +2,14 @@ import XCTest
 @testable import FinFlow
 
 final class StorageAndAPITests: XCTestCase {
+    func testDisplayCurrencyDoesNotChangeOriginalCOP() {
+        let original = 100_000.0
+        XCTAssertEqual(CurrencyFormatter.convertedAmountFromCOP(original, rate: 0.00025), 25, accuracy: 0.001)
+        XCTAssertEqual(original, 100_000)
+        XCTAssertNil(CurrencyFormatter.convertedAmountFromCOP(original, rate: -1))
+        XCTAssertNil(CurrencyFormatter.convertedAmountFromCOP(Double.infinity, rate: 0.5))
+    }
+
     func testCalendarDayTransportPreservesLocalDayAtMonthBoundary() throws {
         let instant = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-12-01T02:30:00Z"))
         for (zone, expected) in [("America/Bogota", "2026-11-30"), ("Asia/Tokyo", "2026-12-01")] {

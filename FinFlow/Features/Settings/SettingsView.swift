@@ -3,6 +3,9 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var session: SessionStore
     @State private var showingLogout = false
+    @State private var selectedCurrency = CurrencyFormatter.preferredCode
+    @State private var currencyLoading = false
+    @State private var currencyError: String?
     @AppStorage("finflow.appearance") private var appearance = "dark"
     @AppStorage("finflow.dailyRemindersEnabled") private var dailyRemindersEnabled = true
     var body: some View {
@@ -33,6 +36,27 @@ struct SettingsView: View {
                         }
                         .pickerStyle(.segmented)
                     }
+                    Section("Moneda de visualización") {
+                        Picker("Ver importes en", selection: $selectedCurrency) {
+                            ForEach(CurrencyFormatter.available, id: \.0) { option in
+                                Text("\(option.0) · \(option.1)").tag(option.0)
+                            }
+                        }
+                        .disabled(currencyLoading)
+                        .onChange(of: selectedCurrency) { _, code in
+                            guard code != CurrencyFormatter.preferredCode else { return }
+                            Task { await changeDisplayCurrency(code) }
+                        }
+                        if currencyLoading { ProgressView("Consultando tasa de referencia…") }
+                        if let currencyError { Text(currencyError).font(.caption).foregroundStyle(.orange) }
+                        if let date = CurrencyFormatter.rateDate {
+                            LabeledContent("Tasa de referencia", value: date)
+                        }
+                        Text("Convierte la presentación de los importes. Los registros, formularios y exportaciones siguen en COP; no cambia los saldos originales.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                        Link("Fuente: Frankfurter", destination: URL(string: "https://frankfurter.dev/")!)
+                            .font(.footnote)
+                    }
                     Section("Recordatorios") {
                         Toggle("Avisos a las 10:00 a. m. y 4:00 p. m.", isOn: $dailyRemindersEnabled)
                             .onChange(of: dailyRemindersEnabled) { _, enabled in
@@ -49,6 +73,19 @@ struct SettingsView: View {
             }
             .navigationTitle("Ajustes")
             .confirmationDialog("¿Cerrar sesión?", isPresented: $showingLogout, titleVisibility: .visible) { Button("Cerrar sesión", role: .destructive) { session.logout() }; Button("Cancelar", role: .cancel) {} } message: { Text("Se eliminará la sesión guardada de este dispositivo.") }
+    }
+
+    @MainActor
+    private func changeDisplayCurrency(_ code: String) async {
+        currencyLoading = true
+        currencyError = nil
+        defer { currencyLoading = false }
+        do {
+            try await CurrencyFormatter.select(code)
+        } catch {
+            selectedCurrency = CurrencyFormatter.preferredCode
+            currencyError = "No pudimos obtener una tasa válida. Se conserva la moneda anterior."
+        }
     }
 }
 

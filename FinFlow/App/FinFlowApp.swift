@@ -38,6 +38,7 @@ struct FinFlowApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .task { await CurrencyFormatter.refreshRateIfNeeded() }
                 .environmentObject(session)
                 .environmentObject(appLock)
                 .environmentObject(navigation)

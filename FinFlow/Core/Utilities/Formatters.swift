@@ -5,19 +5,133 @@ extension BinaryInteger {
 }
 
 enum CurrencyFormatter {
+    static let available: [(String, String)] = [
+        ("COP", "Peso colombiano"), ("USD", "Dólar estadounidense"),
+        ("EUR", "Euro"), ("GBP", "Libra esterlina"),
+        ("MXN", "Peso mexicano"), ("BRL", "Real brasileño"),
+        ("CAD", "Dólar canadiense")
+    ]
+
+    private static let selectionKey = "finflow.displayCurrency.code"
+    private static let quoteKey = "finflow.displayCurrency.quote"
+    private static let revisionKey = "finflow.displayCurrency.revision"
+
+    private struct ExchangeQuote: Codable {
+        let code: String
+        let rate: Double
+        let date: String
+        let fetchedAt: TimeInterval
+    }
+
+    private struct RemoteExchangeQuote: Decodable {
+        let date: String
+        let base: String
+        let quote: String
+        let rate: Double
+    }
+
+    enum ExchangeError: Error, LocalizedError {
+        case invalid
+        var errorDescription: String? { "No hay una tasa de referencia verificable. Se conserva la moneda anterior." }
+    }
+
+    static var preferredCode: String {
+        let code = UserDefaults.standard.string(forKey: selectionKey) ?? "COP"
+        return available.contains(where: { $0.0 == code }) ? code : "COP"
+    }
+
+    private static func currentQuote() -> ExchangeQuote? {
+        guard preferredCode != "COP",
+              let data = UserDefaults.standard.data(forKey: quoteKey),
+              let quote = try? JSONDecoder().decode(ExchangeQuote.self, from: data),
+              quote.code == preferredCode,
+              quote.rate > 0, quote.rate.isFinite, quote.rate < 1000,
+              quote.fetchedAt <= Date().timeIntervalSince1970,
+              Date().timeIntervalSince1970 - quote.fetchedAt < 72 * 3600,
+              let effectiveDate = ISO8601DateFormatter().date(from: quote.date + "T00:00:00Z"),
+              abs(effectiveDate.timeIntervalSinceNow) < 14 * 86400
+        else { return nil }
+        return quote
+    }
+
+    static var displayCode: String { currentQuote()?.code ?? "COP" }
+    static var rateDate: String? { currentQuote()?.date }
+
+    /// Presentation only. The backend, inputs and exported statements retain their source COP.
+    static func convertedAmountFromCOP(_ value: Double, rate: Double) -> Double? {
+        guard value.isFinite, rate.isFinite, rate > 0 else { return nil }
+        let result = value * rate
+        return result.isFinite ? result : nil
+    }
+
+    private static func presented(_ value: Double) -> (Double, String) {
+        guard let quote = currentQuote(),
+              let converted = convertedAmountFromCOP(value, rate: quote.rate) else { return (value, "COP") }
+        return (converted, quote.code)
+    }
+
     static func format(_ value: Double) -> String {
+        guard value.isFinite else { return "—" }
+        let (amount, code) = presented(value)
         let formatter = NumberFormatter()
         formatter.locale = Locale(identifier: "es_CO")
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "COP"
-        formatter.maximumFractionDigits = 2
         formatter.minimumFractionDigits = 2
-        return formatter.string(from: NSNumber(value: value)) ?? String(format: "$%.2f", value)
+        formatter.maximumFractionDigits = 2
+        if code == "COP" {
+            formatter.numberStyle = .currency
+            formatter.currencyCode = "COP"
+            return formatter.string(from: NSNumber(value: amount)) ?? String(format: "COP %.2f", amount)
+        }
+        formatter.numberStyle = .decimal
+        return code + " " + (formatter.string(from: NSNumber(value: amount)) ?? String(format: "%.2f", amount))
     }
+
     static func compact(_ value: Double) -> String {
-        if abs(value) >= 1_000_000 { return String(format: "$%.1f M", value / 1_000_000) }
-        if abs(value) >= 1_000 { return String(format: "$%.1f K", value / 1_000) }
+        guard value.isFinite else { return "—" }
+        let (amount, code) = presented(value)
+        if abs(amount) >= 1_000_000 { return String(format: "%@ %.1f M", code, amount / 1_000_000) }
+        if abs(amount) >= 1_000 { return String(format: "%@ %.1f K", code, amount / 1_000) }
         return format(value)
+    }
+
+    static func select(_ code: String) async throws {
+        guard available.contains(where: { $0.0 == code }) else { throw ExchangeError.invalid }
+        if code == "COP" {
+            UserDefaults.standard.set("COP", forKey: selectionKey)
+            UserDefaults.standard.removeObject(forKey: quoteKey)
+            incrementRevision()
+            return
+        }
+        guard let url = URL(string: "https://api.frankfurter.dev/v2/rate/cop/" + code.lowercased()) else {
+            throw ExchangeError.invalid
+        }
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let status = response as? HTTPURLResponse, status.statusCode == 200,
+              let remote = try? JSONDecoder().decode(RemoteExchangeQuote.self, from: data),
+              remote.base.uppercased() == "COP", remote.quote.uppercased() == code,
+              remote.rate.isFinite, remote.rate > 0, remote.rate < 1000,
+              let effectiveDate = ISO8601DateFormatter().date(from: remote.date + "T00:00:00Z"),
+              abs(effectiveDate.timeIntervalSinceNow) < 14 * 86400
+        else { throw ExchangeError.invalid }
+        let saved = ExchangeQuote(code: code, rate: remote.rate, date: remote.date,
+                                  fetchedAt: Date().timeIntervalSince1970)
+        let encoded = try JSONEncoder().encode(saved)
+        UserDefaults.standard.set(encoded, forKey: quoteKey)
+        UserDefaults.standard.set(code, forKey: selectionKey)
+        incrementRevision()
+    }
+
+    static func refreshRateIfNeeded() async {
+        let code = preferredCode
+        guard code != "COP" else { return }
+        // Updating on launch is safe; failed refresh retains a recent verified
+        // quote and never fabricates values for a stale one.
+        try? await select(code)
+    }
+
+    private static func incrementRevision() {
+        let current = UserDefaults.standard.integer(forKey: revisionKey)
+        UserDefaults.standard.set(current == Int.max ? 1 : current + 1, forKey: revisionKey)
     }
 }
 
