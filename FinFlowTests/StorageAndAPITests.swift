@@ -2,9 +2,9 @@ import XCTest
 @testable import FinFlow
 
 final class StorageAndAPITests: XCTestCase {
-    func testDisplayCurrencyDoesNotChangeOriginalCOP() {
+    func testDisplayCurrencyDoesNotChangeOriginalCOP() throws {
         let original = 100_000.0
-        XCTAssertEqual(CurrencyFormatter.convertedAmountFromCOP(original, rate: 0.00025), 25, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(CurrencyFormatter.convertedAmountFromCOP(original, rate: 0.00025)), 25, accuracy: 0.001)
         XCTAssertEqual(original, 100_000)
         XCTAssertNil(CurrencyFormatter.convertedAmountFromCOP(original, rate: -1))
         XCTAssertNil(CurrencyFormatter.convertedAmountFromCOP(Double.infinity, rate: 0.5))
