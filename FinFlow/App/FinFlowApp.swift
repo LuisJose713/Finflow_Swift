@@ -38,7 +38,6 @@ struct FinFlowApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
-                .task { await CurrencyFormatter.refreshRateIfNeeded() }
                 .environmentObject(session)
                 .environmentObject(appLock)
                 .environmentObject(navigation)
@@ -52,6 +51,7 @@ struct FinFlowApp: App {
                     }
                 }
                 .task(id: session.user?.id) {
+                    await CurrencyFormatter.loadForAccount(userID: session.user?.id)
                     await preferences.load(userID: session.user?.id)
                     await FinFlowDailyReminders.sync(authenticated: session.isAuthenticated)
                 }

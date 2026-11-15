@@ -72,6 +72,7 @@ struct SettingsView: View {
                 }.scrollContentBackground(.hidden)
             }
             .navigationTitle("Ajustes")
+            .onAppear { selectedCurrency = CurrencyFormatter.preferredCode }
             .confirmationDialog("¿Cerrar sesión?", isPresented: $showingLogout, titleVisibility: .visible) { Button("Cerrar sesión", role: .destructive) { session.logout() }; Button("Cancelar", role: .cancel) {} } message: { Text("Se eliminará la sesión guardada de este dispositivo.") }
     }
 

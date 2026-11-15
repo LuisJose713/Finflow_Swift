@@ -15,6 +15,9 @@ enum CurrencyFormatter {
     private static let selectionKey = "finflow.displayCurrency.code"
     private static let quoteKey = "finflow.displayCurrency.quote"
     private static let revisionKey = "finflow.displayCurrency.revision"
+    private static let accountKey = "finflow.displayCurrency.activeAccount"
+
+    private struct UserCurrency: Decodable { let currency: String }
 
     private struct ExchangeQuote: Codable {
         let code: String
@@ -94,14 +97,7 @@ enum CurrencyFormatter {
         return format(value)
     }
 
-    static func select(_ code: String) async throws {
-        guard available.contains(where: { $0.0 == code }) else { throw ExchangeError.invalid }
-        if code == "COP" {
-            UserDefaults.standard.set("COP", forKey: selectionKey)
-            UserDefaults.standard.removeObject(forKey: quoteKey)
-            incrementRevision()
-            return
-        }
+    private static func fetchVerifiedQuote(_ code: String) async throws -> ExchangeQuote {
         guard let url = URL(string: "https://api.frankfurter.dev/v2/rate/cop/" + code.lowercased()) else {
             throw ExchangeError.invalid
         }
@@ -113,20 +109,54 @@ enum CurrencyFormatter {
               let effectiveDate = ISO8601DateFormatter().date(from: remote.date + "T00:00:00Z"),
               abs(effectiveDate.timeIntervalSinceNow) < 14 * 86400
         else { throw ExchangeError.invalid }
-        let saved = ExchangeQuote(code: code, rate: remote.rate, date: remote.date,
-                                  fetchedAt: Date().timeIntervalSince1970)
-        let encoded = try JSONEncoder().encode(saved)
-        UserDefaults.standard.set(encoded, forKey: quoteKey)
-        UserDefaults.standard.set(code, forKey: selectionKey)
-        incrementRevision()
+        return ExchangeQuote(code: code, rate: remote.rate, date: remote.date,
+                             fetchedAt: Date().timeIntervalSince1970)
     }
 
-    static func refreshRateIfNeeded() async {
-        let code = preferredCode
-        guard code != "COP" else { return }
-        // Updating on launch is safe; failed refresh retains a recent verified
-        // quote and never fabricates values for a stale one.
-        try? await select(code)
+    /// Refresh the per-user server preference on login and remove the previous
+    /// user's display rate immediately to prevent cross-account leakage.
+    static func loadForAccount(userID: Int?) async {
+        let owner = userID ?? 0
+        UserDefaults.standard.set(owner, forKey: accountKey)
+        UserDefaults.standard.set("COP", forKey: selectionKey)
+        UserDefaults.standard.removeObject(forKey: quoteKey)
+        incrementRevision()
+        guard owner > 0 else { return }
+
+        do {
+            let preference: UserCurrency = try await APIClient.shared.request("/preferences/currency")
+            guard UserDefaults.standard.integer(forKey: accountKey) == owner,
+                  available.contains(where: { $0.0 == preference.currency }) else { return }
+            if preference.currency != "COP" {
+                let quote = try await fetchVerifiedQuote(preference.currency)
+                guard UserDefaults.standard.integer(forKey: accountKey) == owner else { return }
+                UserDefaults.standard.set(try JSONEncoder().encode(quote), forKey: quoteKey)
+                UserDefaults.standard.set(preference.currency, forKey: selectionKey)
+                incrementRevision()
+            }
+        } catch {
+            // If the preference server or FX feed is inaccessible, show true COP
+            // values rather than applying an unverified or different user's rate.
+        }
+    }
+
+    /// Save the user's default across Web, iOS and Android. The backend must
+    /// acknowledge the change before the presentation can be updated.
+    static func select(_ code: String) async throws {
+        guard available.contains(where: { $0.0 == code }) else { throw ExchangeError.invalid }
+        let owner = UserDefaults.standard.integer(forKey: accountKey)
+        guard owner > 0 else { throw ExchangeError.invalid }
+        let quote = try await (code == "COP" ? nil : fetchVerifiedQuote(code))
+        guard UserDefaults.standard.integer(forKey: accountKey) == owner else { throw ExchangeError.invalid }
+        try await APIClient.shared.perform("/preferences/currency", method: "PUT", body: ["currency": code])
+        guard UserDefaults.standard.integer(forKey: accountKey) == owner else { throw ExchangeError.invalid }
+        if let quote {
+            UserDefaults.standard.set(try JSONEncoder().encode(quote), forKey: quoteKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: quoteKey)
+        }
+        UserDefaults.standard.set(code, forKey: selectionKey)
+        incrementRevision()
     }
 
     private static func incrementRevision() {
