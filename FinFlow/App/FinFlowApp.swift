@@ -207,12 +207,14 @@ enum FinFlowDailyReminders {
 }
 
 
-// Siri and Shortcuts open an editable movement draft; they NEVER send a POST.
-// The authenticated FinFlow UI and device lock remain the only save entrypoint.
+// Siri's confirmation is the authorization to create a transaction.
+// App Intents call the verified FinFlow API only after the user explicitly says Yes.
+// Cancellation performs no financial write and network failures are never retried.
 struct RegisterFinFlowExpenseIntent: AppIntent {
     static let title: LocalizedStringResource = "Registrar gasto en FinFlow"
-    static let description = IntentDescription("Abre FinFlow para revisar y confirmar un gasto.")
-    static let openAppWhenRun: Bool = true
+    static let description = IntentDescription("Confirma y registra un gasto en FinFlow con Siri.")
+    static let openAppWhenRun: Bool = false
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication
 
     @Parameter(title: "Título del gasto")
     var concept: String
@@ -220,22 +222,36 @@ struct RegisterFinFlowExpenseIntent: AppIntent {
     @Parameter(title: "Monto en COP")
     var amount: Double
 
-    func perform() async throws -> some IntentResult {
-        let draftConcept = concept
-        let draftAmount = amount
-        await MainActor.run {
-            AppNavigationStore.shared.openTransactionDraft(
-                type: "expense", title: draftConcept, amount: draftAmount
+    @Parameter(title: "Categoría de gasto")
+    var categoryName: String
+
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        let prepared: VoiceTransactionRegistration.Prepared
+        do {
+            prepared = try await VoiceTransactionRegistration.prepare(
+                type: "expense", title: concept, amount: amount, categoryName: categoryName
             )
+        } catch {
+            return .result(dialog: "No se creó el gasto. \(error.localizedDescription)")
         }
-        return .result()
+        try await requestConfirmation(
+            conditions: [], actionName: .create,
+            dialog: IntentDialog("¿Confirmas registrar un gasto de \(prepared.request.amount) pesos por \(prepared.request.description) en \(prepared.categoryName)?")
+        )
+        do {
+            _ = try await VoiceTransactionRegistration.commit(prepared)
+            return .result(dialog: "Gasto registrado correctamente en FinFlow.")
+        } catch {
+            return .result(dialog: "No pudimos confirmar el registro. Consulta tus movimientos antes de volver a intentarlo.")
+        }
     }
 }
 
 struct RegisterFinFlowIncomeIntent: AppIntent {
     static let title: LocalizedStringResource = "Registrar ingreso en FinFlow"
-    static let description = IntentDescription("Abre FinFlow para revisar y confirmar un ingreso.")
-    static let openAppWhenRun: Bool = true
+    static let description = IntentDescription("Confirma y registra un ingreso en FinFlow con Siri.")
+    static let openAppWhenRun: Bool = false
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication
 
     @Parameter(title: "Título del ingreso")
     var concept: String
@@ -243,15 +259,28 @@ struct RegisterFinFlowIncomeIntent: AppIntent {
     @Parameter(title: "Monto en COP")
     var amount: Double
 
-    func perform() async throws -> some IntentResult {
-        let draftConcept = concept
-        let draftAmount = amount
-        await MainActor.run {
-            AppNavigationStore.shared.openTransactionDraft(
-                type: "income", title: draftConcept, amount: draftAmount
+    @Parameter(title: "Categoría de ingreso")
+    var categoryName: String
+
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        let prepared: VoiceTransactionRegistration.Prepared
+        do {
+            prepared = try await VoiceTransactionRegistration.prepare(
+                type: "income", title: concept, amount: amount, categoryName: categoryName
             )
+        } catch {
+            return .result(dialog: "No se creó el ingreso. \(error.localizedDescription)")
         }
-        return .result()
+        try await requestConfirmation(
+            conditions: [], actionName: .create,
+            dialog: IntentDialog("¿Confirmas registrar un ingreso de \(prepared.request.amount) pesos por \(prepared.request.description) en \(prepared.categoryName)?")
+        )
+        do {
+            _ = try await VoiceTransactionRegistration.commit(prepared)
+            return .result(dialog: "Ingreso registrado correctamente en FinFlow.")
+        } catch {
+            return .result(dialog: "No pudimos confirmar el registro. Consulta tus movimientos antes de volver a intentarlo.")
+        }
     }
 }
 
