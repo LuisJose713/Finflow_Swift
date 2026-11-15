@@ -1,4 +1,5 @@
 import SwiftUI
+import AppIntents
 import UIKit
 @preconcurrency import UserNotifications
 
@@ -202,5 +203,77 @@ enum FinFlowDailyReminders {
                 identifier: id, content: content, trigger: trigger
             ))
         }
+    }
+}
+
+
+// Siri and Shortcuts open an editable movement draft; they NEVER send a POST.
+// The authenticated FinFlow UI and device lock remain the only save entrypoint.
+struct RegisterFinFlowExpenseIntent: AppIntent {
+    static var title: LocalizedStringResource = "Registrar gasto en FinFlow"
+    static var description = IntentDescription("Abre FinFlow para revisar y confirmar un gasto.")
+    static var openAppWhenRun: Bool = true
+
+    @Parameter(title: "Título del gasto")
+    var concept: String?
+
+    @Parameter(title: "Monto en COP")
+    var amount: Double?
+
+    func perform() async throws -> some IntentResult {
+        let draftConcept = concept
+        let draftAmount = amount
+        await MainActor.run {
+            AppNavigationStore.shared.openTransactionDraft(
+                type: "expense", title: draftConcept, amount: draftAmount
+            )
+        }
+        return .result()
+    }
+}
+
+struct RegisterFinFlowIncomeIntent: AppIntent {
+    static var title: LocalizedStringResource = "Registrar ingreso en FinFlow"
+    static var description = IntentDescription("Abre FinFlow para revisar y confirmar un ingreso.")
+    static var openAppWhenRun: Bool = true
+
+    @Parameter(title: "Título del ingreso")
+    var concept: String?
+
+    @Parameter(title: "Monto en COP")
+    var amount: Double?
+
+    func perform() async throws -> some IntentResult {
+        let draftConcept = concept
+        let draftAmount = amount
+        await MainActor.run {
+            AppNavigationStore.shared.openTransactionDraft(
+                type: "income", title: draftConcept, amount: draftAmount
+            )
+        }
+        return .result()
+    }
+}
+
+struct FinFlowAssistantShortcuts: AppShortcutsProvider {
+    static var appShortcuts: [AppShortcut] {
+        AppShortcut(
+            intent: RegisterFinFlowExpenseIntent(),
+            phrases: [
+                "Registrar un gasto en \(.applicationName)",
+                "Crear gasto con \(.applicationName)"
+            ],
+            shortTitle: "Registrar gasto",
+            systemImageName: "minus.circle"
+        )
+        AppShortcut(
+            intent: RegisterFinFlowIncomeIntent(),
+            phrases: [
+                "Registrar un ingreso en \(.applicationName)",
+                "Crear ingreso con \(.applicationName)"
+            ],
+            shortTitle: "Registrar ingreso",
+            systemImageName: "plus.circle"
+        )
     }
 }
