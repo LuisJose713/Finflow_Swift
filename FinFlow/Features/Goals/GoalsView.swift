@@ -90,7 +90,7 @@ struct GoalsView: View {
     }
 
     private func delete(_ goal: FinanceGoal) async {
-        do { try await APIClient.shared.perform("/goals/\(goal.id)", method: "DELETE"); refreshState.invalidate(); goals.removeAll { $0.id == goal.id } } catch { self.error = error.localizedDescription }
+        do { try await APIClient.shared.perform("/goals/\(goal.id)", method: "DELETE"); refreshState.invalidate(); isLoading = false; goals.removeAll { $0.id == goal.id } } catch { self.error = error.localizedDescription }
     }
     private func setStatus(_ goal: FinanceGoal, _ status: String) async {
         do {
@@ -102,7 +102,7 @@ struct GoalsView: View {
         guard !isFunding else { return }
         guard let goal = fundingGoal, goal.status == "active", let amount = Double(fundAmount.replacingOccurrences(of: ",", with: ".")), amount.isFinite, amount > 0, amount <= goal.targetAmount - goal.currentAmount else { error = "Ingresa un aporte válido que no supere el saldo pendiente."; fundingGoal = nil; return }
         isFunding = true; defer { isFunding = false }
-        do { let updated: FinanceGoal = try await APIClient.shared.request("/goals/\(goal.id)/contribute", method: "PATCH", body: AmountRequest(amount: amount)); refreshState.invalidate(); if let index = goals.firstIndex(where: { $0.id == goal.id }) { goals[index] = updated }; fundingGoal = nil }
+        do { let updated: FinanceGoal = try await APIClient.shared.request("/goals/\(goal.id)/contribute", method: "PATCH", body: AmountRequest(amount: amount)); refreshState.invalidate(); isLoading = false; if let index = goals.firstIndex(where: { $0.id == goal.id }) { goals[index] = updated }; fundingGoal = nil }
         catch { self.error = error.localizedDescription; fundingGoal = nil }
     }
 }

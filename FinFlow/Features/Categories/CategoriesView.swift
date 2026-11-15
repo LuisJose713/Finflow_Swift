@@ -131,6 +131,7 @@ struct CategoriesView: View {
         do {
             try await APIClient.shared.perform("/categories/\(category.id)", method: "DELETE")
             refreshState.invalidate()
+            loading = false
             categories.removeAll { $0.id == category.id }
             deleting = nil
         } catch {
