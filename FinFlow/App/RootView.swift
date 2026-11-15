@@ -428,7 +428,7 @@ struct MainTabView: View {
         guard let destination = navigation.takeDestination() else { return }
         detail = nil
         closeDrawer()
-        selectedTab = destination == .transactions ? .transactions : .home
+        selectedTab = destination == .transactions || destination == .createTransaction ? .transactions : .home
     }
 
     @ViewBuilder private func detailView(_ destination: DrawerDestination) -> some View {
