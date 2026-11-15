@@ -37,6 +37,7 @@ final class FinFlowUITests: XCTestCase {
         app.buttons["auth.submit"].tap()
         let understood = app.buttons["privacy.continue"]
         XCTAssertTrue(understood.waitForExistence(timeout: 15))
+        dismissPasswordSavePrompt(in: app, timeout: 10)
         // A system Save Password sheet can cover this button after login.
         // XCTest invokes interruption monitors during an interaction, not
         // while polling isHittable. Waiting for hittability here prevented
@@ -44,9 +45,35 @@ final class FinFlowUITests: XCTestCase {
         // so XCTest handles the interruption and retries the interaction.
         understood.tap()
         XCTAssertTrue(understood.waitForNonExistence(timeout: 8), "Privacy notice must close before entering FinFlow")
+        // The credential provider can finish presenting only after the app's
+        // cover is dismissed. It is not always an XCTest interruption, so
+        // finish the explicit system interaction before testing the dashboard.
+        dismissPasswordSavePrompt(in: app, timeout: 5)
         // iPad presents the adaptive sidebar rather than an iPhone tab bar.
         XCTAssertTrue(app.navigationBars["FinFlow"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["Cerrar menú"].exists, "A closed drawer must not expose its modal controls")
+    }
+
+    private func dismissPasswordSavePrompt(in app: XCUIApplication, timeout: TimeInterval) {
+        let labels = NSPredicate(format: "label IN %@", ["Not Now", "Ahora no", "No guardar"])
+        let owners = [app, XCUIApplication(bundleIdentifier: "com.apple.springboard")]
+        let buttons = owners.map { $0.buttons.matching(labels) }
+        // Inspect all matching buttons: an inaccessible remote placeholder
+        // can precede the visible credential-provider button in the tree.
+        let visible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            buttons.contains { query in
+                query.allElementsBoundByIndex.contains { $0.exists && $0.isHittable }
+            }
+        }, object: nil)
+        guard XCTWaiter.wait(for: [visible], timeout: timeout) == .completed else { return }
+        for query in buttons {
+            if let decline = query.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable }) {
+                decline.tap()
+                XCTAssertTrue(decline.waitForNonExistence(timeout: 8), "The password-saving prompt must close")
+                return
+            }
+        }
+        XCTFail("The visible password-saving prompt disappeared before it could be dismissed")
     }
 
     private func tap(_ element: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
