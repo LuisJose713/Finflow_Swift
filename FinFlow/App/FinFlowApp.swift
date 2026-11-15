@@ -215,10 +215,10 @@ struct RegisterFinFlowExpenseIntent: AppIntent {
     static let openAppWhenRun: Bool = true
 
     @Parameter(title: "Título del gasto")
-    var concept: String?
+    var concept: String
 
     @Parameter(title: "Monto en COP")
-    var amount: Double?
+    var amount: Double
 
     func perform() async throws -> some IntentResult {
         let draftConcept = concept
@@ -238,10 +238,10 @@ struct RegisterFinFlowIncomeIntent: AppIntent {
     static let openAppWhenRun: Bool = true
 
     @Parameter(title: "Título del ingreso")
-    var concept: String?
+    var concept: String
 
     @Parameter(title: "Monto en COP")
-    var amount: Double?
+    var amount: Double
 
     func perform() async throws -> some IntentResult {
         let draftConcept = concept
