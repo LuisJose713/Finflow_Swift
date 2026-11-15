@@ -40,7 +40,7 @@ final class FinFlowUITests: XCTestCase {
         dismissPasswordSavePrompt(in: app)
         if !understood.isHittable {
             capture(app, "privacy-action-obscured")
-            print("FinFlow privacy notice UI hierarchy: \\(app.debugDescription)")
+            print("FinFlow privacy notice UI hierarchy: \(app.debugDescription)")
         }
         tap(understood)
         XCTAssertTrue(understood.waitForNonExistence(timeout: 8), "Privacy notice must close before entering FinFlow")
