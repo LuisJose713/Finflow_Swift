@@ -38,6 +38,8 @@ final class FinFlowUITests: XCTestCase {
         let understood = app.buttons["privacy.continue"]
         XCTAssertTrue(understood.waitForExistence(timeout: 15))
         dismissPasswordSavePrompt(in: app, timeout: 10)
+        XCTAssertFalse(app.buttons["navigation.openMenu"].exists,
+                       "Privacy must hide the underlying navigation from accessibility")
         // A system Save Password sheet can cover this button after login.
         // XCTest invokes interruption monitors during an interaction, not
         // while polling isHittable. Waiting for hittability here prevented

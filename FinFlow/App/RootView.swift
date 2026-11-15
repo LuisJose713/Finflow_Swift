@@ -30,7 +30,7 @@ struct RootView: View {
                     AppLockView()
                 } else {
                     ZStack {
-                        MainTabView()
+                        MainTabView(interactionEnabled: !showPrivacyNotice && !requirePrivacyConsent)
                             .id("\(session.user?.id ?? 0)-\(currencyRevision)")
                             .allowsHitTesting(!showPrivacyNotice && !requirePrivacyConsent)
                             .accessibilityHidden(showPrivacyNotice || requirePrivacyConsent)
@@ -188,6 +188,7 @@ struct RootView: View {
 /// iPhone keeps the native four-tab shortcuts and gains an optional edge-swipe
 /// navigation drawer. iPad keeps Apple's adaptive sidebar.
 struct MainTabView: View {
+    var interactionEnabled = true
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var navigation: AppNavigationStore
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -238,7 +239,7 @@ struct MainTabView: View {
             }
             .background {
                 DrawerPanGesture(
-                    enabled: sizeClass == .compact && detail == nil,
+                    enabled: interactionEnabled && sizeClass == .compact && detail == nil,
                     isOpen: drawerOpen,
                     drawerWidth: width,
                     changed: { offset in
@@ -251,6 +252,9 @@ struct MainTabView: View {
                 )
             }
             .onChange(of: sizeClass) { _, _ in setDrawer(false) }
+            .onChange(of: interactionEnabled) { _, enabled in
+                if !enabled { setDrawer(false) }
+            }
             .onChange(of: navigation.pendingDestination) { _, _ in openNotificationDestination() }
             .onAppear { openNotificationDestination() }
             .overlay(alignment: .topLeading) {
