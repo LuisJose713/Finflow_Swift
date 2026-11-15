@@ -3,7 +3,7 @@ import Charts
 
 struct FinancialSummaryCharts: View {
     let stats: TransactionStats
-    @AppStorage("finflow.dashboard.chartStyle") private var style = "line"
+    @AppStorage("finflow.dashboard.chartStyle") private var style = "circle"
     @State private var selectedMonth: String?
     @State private var selectedAngle: Double?
     @State private var selectedType = "income"
