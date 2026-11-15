@@ -234,10 +234,15 @@ struct RegisterFinFlowExpenseIntent: AppIntent {
         } catch {
             return .result(dialog: "No se creó el gasto. \(error.localizedDescription)")
         }
-        try await requestConfirmation(
-            conditions: [], actionName: .create,
-            dialog: IntentDialog("¿Confirmas registrar un gasto de \(prepared.request.amount) pesos por \(prepared.request.description) en \(prepared.categoryName)?")
-        )
+        if #available(iOS 18.0, *) {
+            try await requestConfirmation(
+                conditions: [], actionName: .create,
+                dialog: IntentDialog("¿Confirmas registrar un gasto de \(prepared.request.amount) pesos por \(prepared.request.description) en \(prepared.categoryName)?")
+            )
+        } else {
+            // On iOS 17 use the compatible confirmation API.
+            try await requestConfirmation()
+        }
         do {
             _ = try await VoiceTransactionRegistration.commit(prepared)
             return .result(dialog: "Gasto registrado correctamente en FinFlow.")
@@ -271,10 +276,15 @@ struct RegisterFinFlowIncomeIntent: AppIntent {
         } catch {
             return .result(dialog: "No se creó el ingreso. \(error.localizedDescription)")
         }
-        try await requestConfirmation(
-            conditions: [], actionName: .create,
-            dialog: IntentDialog("¿Confirmas registrar un ingreso de \(prepared.request.amount) pesos por \(prepared.request.description) en \(prepared.categoryName)?")
-        )
+        if #available(iOS 18.0, *) {
+            try await requestConfirmation(
+                conditions: [], actionName: .create,
+                dialog: IntentDialog("¿Confirmas registrar un ingreso de \(prepared.request.amount) pesos por \(prepared.request.description) en \(prepared.categoryName)?")
+            )
+        } else {
+            // On iOS 17 use the compatible confirmation API.
+            try await requestConfirmation()
+        }
         do {
             _ = try await VoiceTransactionRegistration.commit(prepared)
             return .result(dialog: "Ingreso registrado correctamente en FinFlow.")
