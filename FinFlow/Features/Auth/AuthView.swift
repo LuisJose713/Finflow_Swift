@@ -114,6 +114,9 @@ struct AuthView: View {
     }
     private func submit() async {
         guard !session.isLoading else { return }
+        // The keyboard and system AutoFill must not remain over the privacy
+        // notice when a successful login replaces this screen.
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         email = email.trimmingCharacters(in: .whitespacesAndNewlines)
         name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard password.utf8.count <= 72 else { session.errorMessage = "La contraseña supera el máximo de 72 bytes. Los acentos y emojis pueden ocupar más de un byte."; return }

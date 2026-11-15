@@ -30,7 +30,9 @@ struct RootView: View {
                 } else {
                     MainTabView()
                     .id(session.user?.id)
-                    .sheet(isPresented: $showPrivacyNotice) {
+                    // A full-screen notice prevents the adaptive iPad sheet and
+                    // a lingering keyboard/AutoFill overlay from hiding its CTA.
+                    .fullScreenCover(isPresented: $showPrivacyNotice) {
                         PrivacyNoticeSheet(policy: privacyPolicy) {
                             acknowledgeNotice()
                         }
@@ -592,24 +594,24 @@ struct PrivacyNoticeSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    Text("Tu información, bajo tu control")
-                        .font(.title2.bold())
-                    Text("Este aviso aparece una vez para que conozcas qué datos utiliza FinFlow.")
-                        .font(.subheadline).foregroundStyle(.secondary)
-                    PrivacyPolicyDocument(policy: policy)
-                    Text("Cerrar esta ventana solo confirma que se mostró la información. No registra consentimiento para una política pendiente.")
-                        .font(.caption).foregroundStyle(.secondary)
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        Text("Tu información, bajo tu control")
+                            .font(.title2.bold())
+                        Text("Este aviso aparece una vez para que conozcas qué datos utiliza FinFlow.")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                        PrivacyPolicyDocument(policy: policy)
+                        Text("Cerrar esta ventana solo confirma que se mostró la información. No registra consentimiento para una política pendiente.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: 650, alignment: .leading)
+                    .padding(22)
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: 650, alignment: .leading)
-                .padding(22)
-                .frame(maxWidth: .infinity)
-            }
-            .background(FinFlowTheme.background)
-            .navigationTitle("Privacidad")
-            .navigationBarTitleDisplayMode(.inline)
-            .safeAreaInset(edge: .bottom) {
+                Divider()
+                // Keep the action inside the actual layout, not a safe-area
+                // inset that can become unreachable in iPad adaptive sheets.
                 Button(action: acknowledge) {
                     Text("Entendido, continuar a FinFlow")
                         .fontWeight(.semibold)
@@ -620,10 +622,14 @@ struct PrivacyNoticeSheet: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("privacy.continue")
-                .padding()
+                .padding(16)
                 .frame(maxWidth: 660)
+                .frame(maxWidth: .infinity)
                 .background(.regularMaterial)
             }
+            .background(FinFlowTheme.background)
+            .navigationTitle("Privacidad")
+            .navigationBarTitleDisplayMode(.inline)
         }
     }
 }

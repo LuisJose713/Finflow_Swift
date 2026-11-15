@@ -38,6 +38,10 @@ final class FinFlowUITests: XCTestCase {
         let understood = app.buttons["privacy.continue"]
         XCTAssertTrue(understood.waitForExistence(timeout: 15))
         dismissPasswordSavePrompt(in: app)
+        if !understood.isHittable {
+            capture(app, "privacy-action-obscured")
+            print("FinFlow privacy notice UI hierarchy: \\(app.debugDescription)")
+        }
         tap(understood)
         XCTAssertTrue(understood.waitForNonExistence(timeout: 8), "Privacy notice must close before entering FinFlow")
         // iPad presents the adaptive sidebar rather than an iPhone tab bar.
