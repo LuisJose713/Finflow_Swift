@@ -82,7 +82,7 @@ struct SettingsView: View {
         currencyError = nil
         defer { currencyLoading = false }
         do {
-            try await CurrencyFormatter.select(code)
+            try await CurrencyPreferenceSync.select(code)
         } catch {
             selectedCurrency = CurrencyFormatter.preferredCode
             currencyError = "No pudimos obtener una tasa válida. Se conserva la moneda anterior."

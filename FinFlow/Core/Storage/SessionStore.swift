@@ -162,3 +162,45 @@ final class UiPreferencesStore: ObservableObject {
         }
     }
 }
+
+
+/// The authenticated service owns network calls; formatters are Foundation-only
+/// so the standalone format/contract verification remains compilable.
+@MainActor
+enum CurrencyPreferenceSync {
+    private struct UserCurrency: Decodable { let currency: String }
+
+    static func loadForAccount(userID: Int?) async {
+        CurrencyFormatter.beginAccount(userID)
+        guard let userID, userID > 0 else { return }
+        do {
+            let preference: UserCurrency = try await APIClient.shared.request("/preferences/currency")
+            guard CurrencyFormatter.accountOwner == userID,
+                  CurrencyFormatter.available.contains(where: { $0.0 == preference.currency }) else { return }
+            if preference.currency == "COP" { return }
+            let quote = try await CurrencyFormatter.fetchVerifiedQuote(preference.currency)
+            guard CurrencyFormatter.accountOwner == userID else { return }
+            try CurrencyFormatter.applyServerCode(preference.currency, quote: quote)
+        } catch {
+            // A stale or unreachable FX quote cannot relabel real COP amounts.
+        }
+    }
+
+    static func select(_ code: String) async throws {
+        let owner = CurrencyFormatter.accountOwner
+        guard owner > 0,
+              CurrencyFormatter.available.contains(where: { $0.0 == code }) else {
+            throw CurrencyFormatter.ExchangeError.invalid
+        }
+        let quote: CurrencyFormatter.ExchangeQuote?
+        if code == "COP" {
+            quote = nil
+        } else {
+            quote = try await CurrencyFormatter.fetchVerifiedQuote(code)
+        }
+        guard CurrencyFormatter.accountOwner == owner else { throw CurrencyFormatter.ExchangeError.invalid }
+        try await APIClient.shared.perform("/preferences/currency", method: "PUT", body: ["currency": code])
+        guard CurrencyFormatter.accountOwner == owner else { throw CurrencyFormatter.ExchangeError.invalid }
+        try CurrencyFormatter.applyServerCode(code, quote: quote)
+    }
+}

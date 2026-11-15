@@ -51,7 +51,7 @@ struct FinFlowApp: App {
                     }
                 }
                 .task(id: session.user?.id) {
-                    await CurrencyFormatter.loadForAccount(userID: session.user?.id)
+                    await CurrencyPreferenceSync.loadForAccount(userID: session.user?.id)
                     await preferences.load(userID: session.user?.id)
                     await FinFlowDailyReminders.sync(authenticated: session.isAuthenticated)
                 }
