@@ -2,6 +2,8 @@ import SwiftUI
 
 struct TransactionsView: View {
     @EnvironmentObject private var session: SessionStore
+    @EnvironmentObject private var navigation: AppNavigationStore
+    @State private var assistantDraft: AssistantTransactionDraft?
     @State private var transactions: [FinanceTransaction] = []
     @State private var categories: [FinanceCategory] = []
     @State private var accounts: [FinancialAccount] = []
@@ -94,7 +96,17 @@ struct TransactionsView: View {
                 Task { await load() }
             }
             .refreshable { await load() }
-            .sheet(isPresented: $showingCreate, onDismiss: { Task { await load() } }) { CreateTransactionView(categories: categories, accounts: accounts) }
+            .sheet(isPresented: $showingCreate, onDismiss: {
+                assistantDraft = nil
+                Task { await load() }
+            }) {
+                CreateTransactionView(
+                    categories: categories, accounts: accounts,
+                    initialType: assistantDraft?.type ?? "expense",
+                    assistantTitle: assistantDraft?.title,
+                    assistantAmount: assistantDraft?.amount
+                )
+            }
             .sheet(item: $editingTransaction, onDismiss: { Task { await load() } }) { transaction in
                 CreateTransactionView(categories: categories, accounts: accounts, editing: transaction)
             }
@@ -109,7 +121,16 @@ struct TransactionsView: View {
             .sheet(isPresented: $showingShare, onDismiss: removeTemporaryExport) {
                 if let exportURL { ShareSheet(items: [exportURL]) }
             }
-            .onAppear { isVisible = true }
+            .onAppear {
+                isVisible = true
+                openAssistantDraftIfReady()
+            }
+            .onChange(of: navigation.pendingAssistantDraft) { _, _ in
+                openAssistantDraftIfReady()
+            }
+            .onChange(of: isLoading) { _, loading in
+                if !loading { openAssistantDraftIfReady() }
+            }
             .onDisappear {
                 isVisible = false
                 exportOperation = UUID()
@@ -118,6 +139,14 @@ struct TransactionsView: View {
             }
         }
     }
+    @MainActor
+    private func openAssistantDraftIfReady() {
+        guard isVisible, !isLoading, session.isAuthenticated, !showingCreate,
+              let draft = navigation.takeAssistantDraft() else { return }
+        assistantDraft = draft
+        showingCreate = true
+    }
+
     private var yearOptions: [Int] { Array(Set(transactions.map { Calendar.current.component(.year, from: $0.parsedDate) })).sorted(by: >) }
     @MainActor private func load() async {
         guard !requestInFlight, let userID = session.user?.id else { return }
@@ -213,6 +242,8 @@ struct CreateTransactionView: View {
     var editing: FinanceTransaction? = nil
     var initialType = "expense"
     var accountNotice: String? = nil
+    var assistantTitle: String? = nil
+    var assistantAmount: Double? = nil
     @State private var description = ""
     @State private var status = "completed"
     @State private var amount = ""
@@ -263,6 +294,10 @@ struct CreateTransactionView: View {
                 } else if categoryId == 0 {
                     type = initialType == "income" ? "income" : "expense"
                     categoryId = suitableCategories.first?.id ?? 0
+                    if let assistantTitle, !assistantTitle.isEmpty { description = assistantTitle }
+                    if let assistantAmount, assistantAmount.isFinite, assistantAmount > 0 {
+                        amount = String(assistantAmount)
+                    }
                 }
             }
             .onChange(of: type) { _, newType in categoryId = categories.first(where: { $0.type.lowercased() == newType })?.id ?? 0 }
