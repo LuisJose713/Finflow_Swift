@@ -92,6 +92,7 @@ struct TransactionsView: View {
                 ToolbarItem(placement: .topBarTrailing) { Button { showingCreate = true } label: { Image(systemName: "plus.circle.fill") }.accessibilityLabel("Nuevo movimiento").accessibilityIdentifier("transactions.add") }
             }
             .task { await load() }
+            .financeLiveSync { await load(silent: true) }
             .onReceive(NotificationCenter.default.publisher(for: .finflowFinanceChanged).receive(on: RunLoop.main)) { _ in
                 Task { await load() }
             }
@@ -148,11 +149,11 @@ struct TransactionsView: View {
     }
 
     private var yearOptions: [Int] { Array(Set(transactions.map { Calendar.current.component(.year, from: $0.parsedDate) })).sorted(by: >) }
-    @MainActor private func load() async {
+    @MainActor private func load(silent: Bool = false) async {
         guard !requestInFlight, let userID = session.user?.id else { return }
         requestInFlight = true
-        isLoading = true
-        defer { isLoading = false; requestInFlight = false }
+        if !silent { isLoading = true }
+        defer { if !silent { isLoading = false }; requestInFlight = false }
         do {
             async let remote: [FinanceTransaction] = APIClient.shared.request("/transactions")
             async let cats: [FinanceCategory] = APIClient.shared.request("/categories")

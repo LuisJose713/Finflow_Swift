@@ -92,6 +92,7 @@ struct AccountsView: View {
             }
         }
         .task { await load() }
+            .financeLiveSync { await load(silent: true) }
         .sheet(isPresented: $showAccountEditor, onDismiss: { Task { await load() } }) {
             FinancialAccountEditor(account: editing) { name, type, opening in
                 if let editing {
@@ -128,16 +129,16 @@ struct AccountsView: View {
     }
     private func name(_ id: Int) -> String { accounts.first { $0.id == id }?.name ?? "Cuenta \(id)" }
 
-    private func load() async {
-        loading = true
-        defer { loading = false }
+    private func load(silent: Bool = false) async {
+        if !silent { loading = true }
+        defer { if !silent { loading = false } }
         do {
             async let loadedAccounts: [FinancialAccount] = APIClient.shared.request("/accounts")
             async let loadedTransfers: [FinancialTransfer] = APIClient.shared.request("/accounts/transfers")
             accounts = try await loadedAccounts
             transfers = try await loadedTransfers
             error = nil
-        } catch { self.error = error.localizedDescription }
+        } catch { if !silent { self.error = error.localizedDescription } }
     }
     private func archive(_ account: FinancialAccount) async {
         defer { archiving = nil }

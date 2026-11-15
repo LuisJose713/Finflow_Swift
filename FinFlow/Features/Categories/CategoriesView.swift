@@ -46,6 +46,7 @@ struct CategoriesView: View {
             }
         }
         .task { await load() }
+            .financeLiveSync { await load(silent: true) }
         .sheet(isPresented: $showingEditor, onDismiss: { Task { await load() } }) {
             CategoryEditor(category: editing) { input in
                 if let editing {
@@ -109,9 +110,9 @@ struct CategoriesView: View {
         }
     }
 
-    private func load() async {
-        loading = true
-        defer { loading = false }
+    private func load(silent: Bool = false) async {
+        if !silent { loading = true }
+        defer { if !silent { loading = false } }
         do {
             categories = try await APIClient.shared.request("/categories")
             error = nil

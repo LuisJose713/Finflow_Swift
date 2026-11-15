@@ -79,6 +79,7 @@ struct RecurringView: View {
             }
         }
         .task { await load() }
+            .financeLiveSync { await load(silent: true) }
         .sheet(isPresented: $showEditor, onDismiss: { Task { await load() } }) {
             RecurringEditor(categories: categories, accounts: accounts) { value in
                 let _: RecurringRule = try await APIClient.shared.request(
@@ -104,9 +105,9 @@ struct RecurringView: View {
         }
     }
 
-    private func load() async {
-        loading = true
-        defer { loading = false }
+    private func load(silent: Bool = false) async {
+        if !silent { loading = true }
+        defer { if !silent { loading = false } }
         do {
             async let a: [RecurringRule] = APIClient.shared.request("/recurring")
             async let b: [FinanceCategory] = APIClient.shared.request("/categories")
@@ -115,7 +116,7 @@ struct RecurringView: View {
             categories = try await b
             accounts = try await c
             error = nil
-        } catch { self.error = error.localizedDescription }
+        } catch { if !silent { self.error = error.localizedDescription } }
     }
     private func toggle(_ rule: RecurringRule) async {
         working = true

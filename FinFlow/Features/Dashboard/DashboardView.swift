@@ -84,6 +84,7 @@ struct DashboardView: View {
                 }
             }
             .task { await load() }
+            .financeLiveSync { await load(silent: true) }
             .onReceive(NotificationCenter.default.publisher(for: .finflowFinanceChanged).receive(on: RunLoop.main)) { _ in
                 Task { await load() }
             }
@@ -285,11 +286,11 @@ struct DashboardView: View {
         .accessibilityElement(children: .combine)
     }
 
-    @MainActor private func load() async {
+    @MainActor private func load(silent: Bool = false) async {
         guard !requestInFlight, let owner = session.user?.id else { return }
         requestInFlight = true
-        isLoading = true
-        defer { isLoading = false; requestInFlight = false }
+        if !silent { isLoading = true }
+        defer { if !silent { isLoading = false }; requestInFlight = false }
         do {
             async let loadedStats: TransactionStats = APIClient.shared.request("/transactions/stats")
             async let loadedTransactions: [FinanceTransaction] = APIClient.shared.request("/transactions")

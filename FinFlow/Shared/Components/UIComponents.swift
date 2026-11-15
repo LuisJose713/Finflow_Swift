@@ -239,3 +239,28 @@ struct FinFlowKeyboardDismiss: ViewModifier {
     }
 }
 
+
+
+/** Read-only refresh only while the selected screen and app are active. */
+private struct FinanceLiveSyncModifier: ViewModifier {
+    @Environment(\.scenePhase) private var scenePhase
+    let refresh: () async -> Void
+
+    func body(content: Content) -> some View {
+        content.task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            while !Task.isCancelled {
+                do { try await Task.sleep(nanoseconds: 12_000_000_000) }
+                catch { break }
+                guard !Task.isCancelled else { break }
+                await refresh()
+            }
+        }
+    }
+}
+
+extension View {
+    func financeLiveSync(_ refresh: @escaping () async -> Void) -> some View {
+        modifier(FinanceLiveSyncModifier(refresh: refresh))
+    }
+}

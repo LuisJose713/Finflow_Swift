@@ -76,6 +76,7 @@ struct BudgetsView: View {
                 }
             }
             .task { await load() }
+            .financeLiveSync { await load(silent: true) }
             .onChange(of: month) { _, _ in Task { await load() } }
             .onChange(of: year) { _, _ in Task { await load() } }
             .sheet(isPresented: $showingEditor, onDismiss: { Task { await load() } }) {
@@ -158,9 +159,9 @@ struct BudgetsView: View {
         }
     }
 
-    private func load() async {
-        loading = true
-        defer { loading = false }
+    private func load(silent: Bool = false) async {
+        if !silent { loading = true }
+        defer { if !silent { loading = false } }
         do {
             async let remoteBudgets: [BudgetOverview] = APIClient.shared.request(
                 "/budgets", query: ["year": String(year), "month": String(month)])

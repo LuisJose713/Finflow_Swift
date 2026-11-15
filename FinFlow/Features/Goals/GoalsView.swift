@@ -28,6 +28,7 @@ struct GoalsView: View {
             .navigationTitle("Metas financieras")
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { editingGoal = nil; showingForm = true } label: { Image(systemName: "plus.circle.fill") }.accessibilityLabel("Nueva meta").accessibilityIdentifier("goals.add") } }
             .task { await load() }
+            .financeLiveSync { await load(silent: true) }
             .sheet(isPresented: $showingForm, onDismiss: { Task { await load() } }) { GoalFormView(goal: editingGoal) }
             .sheet(item: $historyGoal) { goal in GoalHistoryView(goal: goal) }
             .confirmationDialog("¿Eliminar esta meta y su historial?", isPresented: Binding(
@@ -72,7 +73,8 @@ struct GoalsView: View {
             if let description = goal.description, !description.isEmpty { Text(description).font(.caption).foregroundStyle(FinFlowTheme.secondaryText) }
         }
     }
-    private func load() async { isLoading = true; defer { isLoading = false }; do { goals = try await APIClient.shared.request("/goals"); error = nil } catch { self.error = error.localizedDescription } }
+    private func load(silent: Bool = false) async { if !silent { isLoading = true }
+        defer { if !silent { isLoading = false } }; do { goals = try await APIClient.shared.request("/goals"); error = nil } catch { if !silent { self.error = error.localizedDescription } } }
     private func delete(_ goal: FinanceGoal) async {
         do { try await APIClient.shared.perform("/goals/\(goal.id)", method: "DELETE"); goals.removeAll { $0.id == goal.id } } catch { self.error = error.localizedDescription }
     }

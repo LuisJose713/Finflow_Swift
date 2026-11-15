@@ -45,6 +45,7 @@ struct PlannedExpensesView: View {
             .navigationTitle("Gastos planificados")
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { editing = nil; showingForm = true } label: { Image(systemName: "plus.circle.fill") } } }
             .task { await load() }
+            .financeLiveSync { await load(silent: true) }
             .sheet(isPresented: $showingForm, onDismiss: { Task { await load() } }) {
                 PlannedExpenseForm(expense: editing, categories: categories) { request in
                     try await save(request, editing: editing)
@@ -101,15 +102,16 @@ struct PlannedExpensesView: View {
     private func statusLabel(_ status: String) -> String { ["pending":"Pendiente", "done":"Ejecutado", "cancelled":"Cancelado"][status] ?? status }
     private func statusColor(_ status: String) -> Color { status == "done" ? FinFlowTheme.mint : status == "cancelled" ? FinFlowTheme.secondaryText : FinFlowTheme.accent }
 
-    private func load() async {
-        isLoading = true; defer { isLoading = false }
+    private func load(silent: Bool = false) async {
+        if !silent { isLoading = true }
+        defer { if !silent { isLoading = false } }
         do {
             async let loadedExpenses: [PlannedExpense] = APIClient.shared.request("/planned-expenses")
             async let loadedCategories: [FinanceCategory] = APIClient.shared.request("/categories")
             expenses = try await loadedExpenses
             categories = (try? await loadedCategories) ?? []
             error = nil
-        } catch { self.error = error.localizedDescription }
+        } catch { if !silent { self.error = error.localizedDescription } }
     }
 
     private func save(_ request: PlannedExpenseRequest, editing: PlannedExpense?) async throws {
