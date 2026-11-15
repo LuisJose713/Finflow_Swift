@@ -37,33 +37,16 @@ final class FinFlowUITests: XCTestCase {
         app.buttons["auth.submit"].tap()
         let understood = app.buttons["privacy.continue"]
         XCTAssertTrue(understood.waitForExistence(timeout: 15))
-        dismissPasswordSavePrompt(in: app)
-        if !understood.isHittable {
-            capture(app, "privacy-action-obscured")
-            print("FinFlow privacy notice UI hierarchy: \(app.debugDescription)")
-        }
-        tap(understood)
+        // A system Save Password sheet can cover this button after login.
+        // XCTest invokes interruption monitors during an interaction, not
+        // while polling isHittable. Waiting for hittability here prevented
+        // our monitor from ever dismissing the sheet. Tap the real control
+        // so XCTest handles the interruption and retries the interaction.
+        understood.tap()
         XCTAssertTrue(understood.waitForNonExistence(timeout: 8), "Privacy notice must close before entering FinFlow")
         // iPad presents the adaptive sidebar rather than an iPhone tab bar.
         XCTAssertTrue(app.navigationBars["FinFlow"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["Cerrar menú"].exists, "A closed drawer must not expose its modal controls")
-    }
-
-    private func dismissPasswordSavePrompt(in app: XCUIApplication) {
-        // AutoFill is a remote sheet inside the app's accessibility hierarchy
-        // on iPhone, and an alert on iPad. XCTest does not consistently treat
-        // this expected dialog as an interruption, so query its actual button.
-        let labels = ["Not Now", "Ahora no", "No guardar"]
-        let decline = app.buttons.matching(NSPredicate(format: "label IN %@", labels)).firstMatch
-        let visible = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "exists == true AND hittable == true"), object: decline)
-        if XCTWaiter.wait(for: [visible], timeout: 3) == .completed,
-           decline.exists, decline.isHittable {
-            decline.tap()
-        }
-        // AutoFill can remove its optional suggestion without a tap. Hidden
-        // suggestions remain in the accessibility tree on iOS 26; their
-        // existence alone must not prevent the actual privacy control below.
     }
 
     private func tap(_ element: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {

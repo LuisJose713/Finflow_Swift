@@ -199,15 +199,10 @@ struct PasswordInput: View {
     var isNew = false
     @State private var revealed = false
 
-    // Synthetic UI tests must not trigger a system password-save or AutoFill
-    // sheet over the privacy notice. Real users retain standard AutoFill.
+    // Exercise the same password AutoFill behavior in Debug and Release.
+    // The UI tests handle system password-saving sheets as interruptions.
     private var contentType: UITextContentType {
-        #if DEBUG
-        if ProcessInfo.processInfo.environment["FINFLOW_UI_TESTING"] == "1" {
-            return .oneTimeCode
-        }
-        #endif
-        return isNew ? .newPassword : .password
+        isNew ? .newPassword : .password
     }
     init(_ title: String, text: Binding<String>, isNew: Bool = false) {
         self.title = title; self._text = text; self.isNew = isNew
