@@ -256,7 +256,7 @@ struct MainTabView: View {
             .onChange(of: navigation.pendingDestination) { _, _ in openNotificationDestination() }
             .onAppear { openNotificationDestination() }
             .overlay(alignment: .topLeading) {
-                if sizeClass == .compact && !drawerOpen && drawerOffset == nil {
+                if sizeClass == .compact && detail == nil && !drawerOpen && drawerOffset == nil {
                     Button {
                         setDrawer(true)
                     } label: {
@@ -277,8 +277,14 @@ struct MainTabView: View {
                 NavigationStack {
                     detailView(destination)
                         .toolbar {
-                            ToolbarItem(placement: .topBarTrailing) {
-                                Button("Cerrar") { detail = nil }
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button { detail = nil } label: {
+                                    Label("Cerrar", systemImage: "xmark")
+                                        .labelStyle(.iconOnly)
+                                        .frame(minWidth: 44, minHeight: 44)
+                                }
+                                .accessibilityLabel("Cerrar")
+                                .accessibilityIdentifier("navigation.closeDetail")
                             }
                         }
                 }
@@ -371,6 +377,7 @@ struct MainTabView: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 24)
             }
+            .accessibilityIdentifier("navigation.drawerScroll")
             Text("FinFlow · AEVQOR")
                 .font(.caption2.weight(.medium))
                 .foregroundStyle(FinFlowTheme.secondaryText)

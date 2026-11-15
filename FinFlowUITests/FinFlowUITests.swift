@@ -86,12 +86,20 @@ final class FinFlowUITests: XCTestCase {
         element.tap()
     }
 
-    private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
+    private func reveal(_ element: XCUIElement, in app: XCUIApplication, scrolling: XCUIElement? = nil) {
+        let surface = scrolling ?? app
         for _ in 0..<8 {
             if element.isHittable { return }
-            app.swipeUp()
+            surface.swipeUp()
         }
         XCTAssertTrue(element.isHittable, "Control must be reachable by scrolling: \(element)")
+    }
+
+    private func closeDetail(in app: XCUIApplication) {
+        let close = app.buttons["navigation.closeDetail"]
+        tap(close)
+        XCTAssertTrue(close.waitForNonExistence(timeout: 10), "The detail must close before another destination opens")
+        XCTAssertTrue(app.buttons["navigation.openMenu"].waitForExistence(timeout: 8))
     }
 
     private func selectChartStyle(_ label: String, in app: XCUIApplication) {
@@ -124,8 +132,9 @@ final class FinFlowUITests: XCTestCase {
         let menu = app.buttons["navigation.openMenu"]
         if menu.exists {
             tap(menu)
+            XCTAssertTrue(app.buttons["Cerrar menú"].waitForExistence(timeout: 8), "The drawer must actually open")
             let destination = app.buttons["navigation.destination.\(route)"]
-            reveal(destination, in: app)
+            reveal(destination, in: app, scrolling: app.scrollViews["navigation.drawerScroll"])
             tap(destination)
         } else {
             // iPad may use the adaptable sidebar. Open the native More tab.
@@ -179,7 +188,7 @@ final class FinFlowUITests: XCTestCase {
                           || app.buttons[content].firstMatch.exists, "Missing content in \(route)")
             capture(app, "screen-\(route)")
             XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "No pudimos interpretar")).firstMatch.exists)
-            if app.buttons["Cerrar"].firstMatch.exists { app.buttons["Cerrar"].firstMatch.tap() }
+            if app.buttons["navigation.closeDetail"].exists { closeDetail(in: app) }
             else if app.navigationBars.buttons.firstMatch.exists { app.navigationBars.buttons.firstMatch.tap() }
         }
     }
@@ -297,7 +306,7 @@ final class FinFlowUITests: XCTestCase {
             open(route, in: app)
             capture(app, "screen-\(route)")
             XCTAssertFalse(app.staticTexts["Acceso restringido"].exists)
-            app.buttons["Cerrar"].firstMatch.tap()
+            closeDetail(in: app)
         }
     }
 }
