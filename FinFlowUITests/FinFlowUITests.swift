@@ -275,6 +275,17 @@ final class FinFlowUITests: XCTestCase {
         XCTAssertFalse(app.buttons["auth.submit"].exists, "Cancelling deletion must preserve the session")
     }
 
+    func testDrawerSwipeFromLeftEdgePreservesTheCurrentScreen() {
+        let app = launch(); signIn(app)
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.015, dy: 0.30))
+        let finish = app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.30))
+        start.press(forDuration: 0.05, thenDragTo: finish)
+        XCTAssertTrue(app.buttons["Cerrar menú"].waitForExistence(timeout: 5))
+        tap(app.buttons["Cerrar menú"])
+        XCTAssertTrue(app.staticTexts["dashboard.balance"].waitForExistence(timeout: 5))
+        capture(app, "drawer-left-edge")
+    }
+
     func testDrawerSwipeAwayFromScreenEdge() {
         let app = launch(); signIn(app)
         let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.30))

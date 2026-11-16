@@ -1,7 +1,21 @@
 import XCTest
+import UIKit
 @testable import FinFlow
 
 final class StorageAndAPITests: XCTestCase {
+    @MainActor func testDrawerHasPriorityOverTheLeftBackEdgeOnly() {
+        let bridge = DrawerPanGesture(enabled: true, isOpen: false, drawerWidth: 320,
+            changed: { _ in }, ended: { _ in }, cancelled: {})
+        let coordinator = DrawerPanGesture.Coordinator(bridge)
+        let edge = UIScreenEdgePanGestureRecognizer()
+        edge.edges = .left
+        XCTAssertTrue(coordinator.gestureRecognizer(coordinator.pan, shouldBeRequiredToFailBy: edge))
+        edge.edges = .right
+        XCTAssertFalse(coordinator.gestureRecognizer(coordinator.pan, shouldBeRequiredToFailBy: edge))
+        coordinator.configuration.enabled = false
+        edge.edges = .left
+        XCTAssertFalse(coordinator.gestureRecognizer(coordinator.pan, shouldBeRequiredToFailBy: edge))
+    }
     func testManualReloadSupersedesAnOlderBackgroundSnapshot() throws {
         var refresh = FinanceRefreshState()
         let oldRead = try XCTUnwrap(refresh.begin(silent: true))

@@ -3,7 +3,11 @@ import Foundation
 @main struct DrawerSwipeChecks {
     static func main() {
         for width in [CGFloat(320), 375, 430, 768] {
-            precondition(!DrawerSwipePolicy.canStart(x: 23, viewportWidth: width, isOpen: false))
+            precondition(DrawerSwipePolicy.canStart(x: 0, viewportWidth: width, isOpen: false))
+            precondition(DrawerSwipePolicy.canStart(x: 8, viewportWidth: width, isOpen: false))
+            precondition(DrawerSwipePolicy.canStart(x: 23, viewportWidth: width, isOpen: false))
+            precondition(!DrawerSwipePolicy.canStart(x: -1, viewportWidth: width, isOpen: false))
+            precondition(!DrawerSwipePolicy.canStart(x: width + 1, viewportWidth: width, isOpen: false))
             precondition(DrawerSwipePolicy.canStart(x: 60, viewportWidth: width, isOpen: false))
             precondition(DrawerSwipePolicy.canStart(x: width - 15, viewportWidth: width, isOpen: false))
         }

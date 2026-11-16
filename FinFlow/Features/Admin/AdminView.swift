@@ -24,6 +24,7 @@ struct AdminView: View {
                                    message: "Solo la cuenta administradora puede consultar este panel.")
                     } else {
                         PresentationCard(cardID: "admin.intro", eyebrow: "Administración", title: "Una plataforma bajo control.", detail: "Indicadores agregados y estado de los servicios de FinFlow.", symbol: "lock.shield")
+                        AdminNotificationScheduler()
                         if let error {
                             ErrorBanner(message: error)
                             Button { Task { await load() } } label: {
@@ -524,5 +525,113 @@ private struct BillingGrantEditor: View {
             try await APIClient.shared.perform("/admin/billing/grants", method: "POST", body: BillingGrantInput(userId: id, planCode: planCode, reason: reason.trimmingCharacters(in: .whitespacesAndNewlines)))
             success = true
         } catch { self.error = error.localizedDescription }
+    }
+}
+
+private struct ScheduledAdminMessage: Decodable, Identifiable {
+    let id: String
+    let title: String
+    let body: String
+    let audience: String
+    let scheduledAt: String
+    let status: String
+    let acceptedWeb: Int
+    let failedWeb: Int
+    let nativeDevices: Int
+}
+private struct AdminMessageList: Decodable { let campaigns: [ScheduledAdminMessage] }
+private struct AdminMessageInput: Encodable {
+    let title: String
+    let body: String
+    let audience: String
+    let scheduledAt: String
+}
+
+private struct AdminNotificationScheduler: View {
+    @State private var title = ""
+    @State private var message = ""
+    @State private var audience = "SELF"
+    @State private var when = Date().addingTimeInterval(300)
+    @State private var campaigns: [ScheduledAdminMessage] = []
+    @State private var busy = false
+    @State private var failure: String?
+    @State private var notice: String?
+
+    private var valid: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        when > Date().addingTimeInterval(30)
+    }
+    var body: some View {
+        SectionCard(title: "Notificaciones programadas", subtitle: "Mensajes y fecha de envío · Hora de Colombia") {
+            VStack(alignment: .leading, spacing: 12) {
+                TextField("Título", text: $title).textFieldStyle(.roundedBorder)
+                    .onChange(of: title) { _, value in if value.count > 80 { title = String(value.prefix(80)) } }
+                TextField("Mensaje", text: $message, axis: .vertical).lineLimit(3...6)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: message) { _, value in if value.count > 320 { message = String(value.prefix(320)) } }
+                Picker("Destinatarios", selection: $audience) {
+                    Text("Solo yo · Prueba privada").tag("SELF")
+                    Text("Todos con avisos activados").tag("ALL")
+                }
+                DatePicker("Fecha y hora de Colombia", selection: $when, in: Date()..., displayedComponents: [.date, .hourAndMinute])
+                    .environment(\.timeZone, TimeZone(identifier: "America/Bogota") ?? .current)
+                Text("La fecha indica el inicio del envío. La recepción depende de los canales disponibles, los permisos y la conexión del dispositivo.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let failure { ErrorBanner(message: failure) }
+                if let notice { Text(notice).font(.footnote).foregroundStyle(.green) }
+                Button { Task { await schedule() } } label: {
+                    Label(busy ? "Guardando…" : "Programar mensaje", systemImage: "calendar.badge.clock")
+                }.buttonStyle(.borderedProminent).disabled(busy || !valid)
+                Button("Actualizar programación") { Task { await load() } }.disabled(busy)
+                ForEach(campaigns) { item in
+                    Divider()
+                    Text(item.title).font(.subheadline.weight(.semibold))
+                    Text(item.body).font(.footnote).foregroundStyle(.secondary)
+                    Text(item.scheduledAt + " · " + status(item.status)).font(.caption2)
+                    if item.status == "SCHEDULED" {
+                        Button("Cancelar envío", role: .destructive) { Task { await cancel(item.id) } }
+                            .disabled(busy)
+                    }
+                }
+            }
+        }.task { await load() }
+    }
+    @MainActor private func load() async {
+        guard !busy else { return }
+        busy = true; failure = nil
+        defer { busy = false }
+        do {
+            let result: AdminMessageList = try await APIClient.shared.request("/admin/notifications")
+            campaigns = result.campaigns
+        } catch { failure = error.localizedDescription }
+    }
+    @MainActor private func schedule() async {
+        guard valid, !busy else { return }
+        busy = true; failure = nil; notice = nil
+        defer { busy = false }
+        do {
+            try await APIClient.shared.perform("/admin/notifications", method: "POST", body: AdminMessageInput(
+                title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+                body: message.trimmingCharacters(in: .whitespacesAndNewlines), audience: audience,
+                scheduledAt: ISO8601DateFormatter().string(from: when)))
+            title = ""; message = ""; notice = "Mensaje programado."
+            let result: AdminMessageList = try await APIClient.shared.request("/admin/notifications")
+            campaigns = result.campaigns
+        } catch { failure = error.localizedDescription }
+    }
+    @MainActor private func cancel(_ id: String) async {
+        guard !busy else { return }
+        busy = true; failure = nil; notice = nil
+        defer { busy = false }
+        do {
+            try await APIClient.shared.perform("/admin/notifications/" + id, method: "DELETE")
+            notice = "Mensaje cancelado."
+            let result: AdminMessageList = try await APIClient.shared.request("/admin/notifications")
+            campaigns = result.campaigns
+        } catch { failure = error.localizedDescription }
+    }
+    private func status(_ value: String) -> String {
+        ["SCHEDULED": "Programado", "SENDING": "Procesando", "SENT": "Procesado", "CANCELLED": "Cancelado", "FAILED": "Con error"][value] ?? value
     }
 }

@@ -119,6 +119,14 @@ struct DrawerPanGesture: UIViewRepresentable {
         }
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+            // At eligible root screens the menu owns the opening edge. Pushed
+            // forms and editable controls are still rejected by shouldReceive.
+            guard configuration.enabled, let edge = other as? UIScreenEdgePanGestureRecognizer else { return false }
+            return edge.edges.contains(.left)
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                                shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
             guard let scroll = other.view as? UIScrollView else { return false }
             return scroll.contentSize.width <= scroll.bounds.width + 1

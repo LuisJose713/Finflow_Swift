@@ -101,6 +101,9 @@ private final class PreviewServer: @unchecked Sendable {
         if path == "/ai/chat" { return (200, ["respuesta": "Podemos empezar por definir un presupuesto mensual y reservar una parte de tus ingresos para tu fondo de emergencia."]) }
         if path == "/billing/catalog" { return (200, ["currency": "COP", "checkoutEnabled": false, "offers": [["code": "MONTHLY", "title": "FinFlow Pro", "description": "Más posibilidades para tus finanzas", "originalCop": 15000, "priceCop": 15000, "savingsPercent": 0, "checkoutEnabled": false]]]) }
         if path == "/billing/me" { return (200, ["planCode": "FREE", "pro": false]) }
+        if path == "/admin/notifications" {
+            return (200, ["capabilities": ["webReady": true, "timezone": "America/Bogota", "webSubscriptions": 1, "nativeDevices": 1], "campaigns": []])
+        }
         if path == "/admin/overview" {
             return (200, ["users": 12, "newUsers30Days": 3, "activeUsers30Days": 8,
                           "transactions": 74, "transactions30Days": 25, "incomeTransactions": 18,
