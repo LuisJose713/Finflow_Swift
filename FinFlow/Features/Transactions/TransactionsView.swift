@@ -1,9 +1,13 @@
 import SwiftUI
+import PhotosUI
+import Vision
 
 struct TransactionsView: View {
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var navigation: AppNavigationStore
     @State private var assistantDraft: AssistantTransactionDraft?
+    @State private var receiptPhoto: PhotosPickerItem?
+    @State private var isReadingReceipt = false
     @State private var transactions: [FinanceTransaction] = []
     @State private var categories: [FinanceCategory] = []
     @State private var accounts: [FinancialAccount] = []
@@ -63,6 +67,11 @@ struct TransactionsView: View {
                         }
                     }
                     .listRowBackground(FinFlowTheme.surface)
+                    if isReadingReceipt {
+                        ProgressView("Leyendo factura en el dispositivo…")
+                            .frame(maxWidth: .infinity).padding()
+                            .listRowBackground(Color.clear)
+                    }
                     if let error { ErrorBanner(message: error).listRowBackground(Color.clear) }
                     if isExporting { ProgressView("Preparando archivo…").listRowBackground(Color.clear) }
                     if isLoading {
@@ -88,6 +97,13 @@ struct TransactionsView: View {
             }
             .navigationTitle("Movimientos")
             .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    PhotosPicker(selection: $receiptPhoto, matching: .images) {
+                        Image(systemName: "doc.text.viewfinder")
+                    }
+                    .accessibilityLabel("Leer factura desde Fotos")
+                    .disabled(isReadingReceipt || showingCreate)
+                }
                 ToolbarItem(placement: .topBarTrailing) { Menu { Button("Exportar PDF", systemImage: "doc.richtext") { Task { await export("pdf") } }; Button("Exportar Excel", systemImage: "tablecells") { Task { await export("xlsx") } }; Button("Exportar CSV", systemImage: "tablecells.badge.ellipsis") { Task { await export("csv") } } } label: { Image(systemName: "square.and.arrow.up") }.accessibilityLabel("Exportar movimientos").disabled(isExporting || showingShare) }
                 ToolbarItem(placement: .topBarTrailing) { Button { showingCreate = true } label: { Image(systemName: "plus.circle.fill") }.accessibilityLabel("Nuevo movimiento").accessibilityIdentifier("transactions.add") }
             }
@@ -97,6 +113,9 @@ struct TransactionsView: View {
                 Task { await load() }
             }
             .refreshable { await load() }
+            .onChange(of: receiptPhoto) { _, selected in
+                if let selected { Task { await readReceipt(selected) } }
+            }
             .sheet(isPresented: $showingCreate, onDismiss: {
                 assistantDraft = nil
                 Task { await load() }
@@ -146,6 +165,40 @@ struct TransactionsView: View {
               let draft = navigation.takeAssistantDraft() else { return }
         assistantDraft = draft
         showingCreate = true
+    }
+
+    /// Vision runs on-device; only the proposed title and amount reach the
+    /// existing authenticated movement form. No photo is uploaded or saved.
+    @MainActor
+    private func readReceipt(_ selection: PhotosPickerItem) async {
+        guard !isReadingReceipt, session.isAuthenticated else { return }
+        isReadingReceipt = true
+        defer {
+            receiptPhoto = nil
+            isReadingReceipt = false
+        }
+        do {
+            guard let bytes = try await selection.loadTransferable(type: Data.self),
+                  !bytes.isEmpty, bytes.count <= 10 * 1024 * 1024 else {
+                error = "La imagen está vacía o supera 10 MB."
+                return
+            }
+            let recognized = try await Task.detached(priority: .userInitiated) {
+                try ReceiptReading.parse(bytes)
+            }.value
+            guard session.isAuthenticated else { return }
+            assistantDraft = AssistantTransactionDraft(
+                type: "expense", title: recognized.title, amount: recognized.amount
+            )
+            // The user MUST review the editable amount, category and account.
+            // OCR never posts to /transactions.
+            error = recognized.amount == nil
+                ? "No identificamos el total de la factura. Complétalo y revisa el gasto antes de guardarlo."
+                : nil
+            showingCreate = true
+        } catch {
+            self.error = "No pudimos reconocer la factura. Prueba con una foto nítida o registra el gasto manualmente."
+        }
     }
 
     private var yearOptions: [Int] { Array(Set(transactions.map { Calendar.current.component(.year, from: $0.parsedDate) })).sorted(by: >) }
@@ -320,5 +373,72 @@ struct CreateTransactionView: View {
                 ? "No pudimos confirmar si el movimiento llegó al servidor. No se reintentará automáticamente para evitar duplicados. Comprueba la lista cuando vuelva Internet."
                 : error.localizedDescription
         }
+    }
+}
+
+
+/// Offline OCR for a selected receipt image. Heuristics never authorize a write.
+private enum ReceiptReading {
+    struct Draft: Sendable {
+        let title: String
+        let amount: Double?
+    }
+
+    static func parse(_ imageData: Data) throws -> Draft {
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = ["es-ES", "en-US"]
+        request.usesLanguageCorrection = true
+        try VNImageRequestHandler(data: imageData, options: [:]).perform([request])
+        let lines = (request.results ?? []).compactMap {
+            $0.topCandidates(1).first?.string.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty }
+        guard !lines.isEmpty else {
+            throw NSError(domain: "FinFlowReceipt", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "No encontramos texto"])
+        }
+        let title = lines.prefix(8).first { text in
+            let normalized = text.folding(options: [.diacriticInsensitive, .caseInsensitive],
+                                          locale: Locale(identifier: "es_CO")).lowercased()
+            return normalized.rangeOfCharacter(from: .letters) != nil &&
+                !["factura", "nit", "fecha", "telefono", "documento", "cliente",
+                  "subtotal", "total", "cajero"].contains(where: normalized.contains)
+        }.map { String($0.prefix(80)) } ?? "Compra de factura"
+
+        // Only a line explicitly labelled TOTAL or VALOR A PAGAR is allowed
+        // to prefill an amount. Never use an arbitrary price from the receipt.
+        let totalLine = lines.reversed().first { line in
+            let value = line.folding(options: [.diacriticInsensitive, .caseInsensitive],
+                                     locale: Locale(identifier: "es_CO")).lowercased()
+            return (value.contains("total") && !value.contains("subtotal")) ||
+                value.contains("valor a pagar")
+        }
+        let pattern = try NSRegularExpression(pattern: #"\d[\d.,]*"#)
+        var amount: Double?
+        if let totalLine {
+            let ns = totalLine as NSString
+            if let token = pattern.matches(in: totalLine, range: NSRange(location: 0, length: ns.length)).last {
+                let value = ns.substring(with: token.range)
+                let separator = max(value.lastIndex(of: ",") ?? value.endIndex,
+                                    value.lastIndex(of: ".") ?? value.endIndex)
+                let normalized: String
+                if separator == value.endIndex {
+                    normalized = value
+                } else {
+                    let tail = value.distance(from: value.index(after: separator), to: value.endIndex)
+                    if tail <= 2 {
+                        normalized = value[..<separator].filter { $0.isNumber } + "." +
+                            value[value.index(after: separator)...]
+                    } else {
+                        normalized = value.filter { $0.isNumber }
+                    }
+                }
+                if let number = Double(normalized), number > 0, number <= 1_000_000_000_000,
+                   (number * 100).rounded() == number * 100 {
+                    amount = number
+                }
+            }
+        }
+        return Draft(title: title, amount: amount)
     }
 }
