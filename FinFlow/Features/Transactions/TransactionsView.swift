@@ -419,19 +419,19 @@ private enum ReceiptReading {
             let ns = totalLine as NSString
             if let token = pattern.matches(in: totalLine, range: NSRange(location: 0, length: ns.length)).last {
                 let value = ns.substring(with: token.range)
-                let separator = max(value.lastIndex(of: ",") ?? value.endIndex,
-                                    value.lastIndex(of: ".") ?? value.endIndex)
+                let separator = [value.lastIndex(of: ","), value.lastIndex(of: ".")]
+                    .compactMap { $0 }.max()
                 let normalized: String
-                if separator == value.endIndex {
-                    normalized = value
-                } else {
+                if let separator {
                     let tail = value.distance(from: value.index(after: separator), to: value.endIndex)
                     if tail <= 2 {
-                        normalized = value[..<separator].filter { $0.isNumber } + "." +
-                            value[value.index(after: separator)...]
+                        normalized = String(value[..<separator].filter { $0.isNumber }) +
+                            "." + String(value[value.index(after: separator)...])
                     } else {
-                        normalized = value.filter { $0.isNumber }
+                        normalized = String(value.filter { $0.isNumber })
                     }
+                } else {
+                    normalized = value
                 }
                 if let number = Double(normalized), number > 0, number <= 1_000_000_000_000,
                    (number * 100).rounded() == number * 100 {
