@@ -47,6 +47,29 @@ jobs:
           test -d "$RUNNER_TEMP/FinFlow-unsigned.xcarchive"
           echo "Unsigned device archive OK; not installable or App Store ready."
 
+      - name: Package unsigned IPA for personal-device sideloading
+        if: ${{ inputs.distribution != 'testflight' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH="$RUNNER_TEMP/FinFlow-unsigned.xcarchive/Products/Applications/FinFlow.app"
+          test -d "$APP_PATH"
+          mkdir -p "$RUNNER_TEMP/finflow-unsigned/Payload"
+          ditto "$APP_PATH" "$RUNNER_TEMP/finflow-unsigned/Payload/FinFlow.app"
+          cd "$RUNNER_TEMP/finflow-unsigned"
+          /usr/bin/zip -qry "$RUNNER_TEMP/FinFlow-unsigned.ipa" Payload
+          test -s "$RUNNER_TEMP/FinFlow-unsigned.ipa"
+          echo "Unsigned IPA packaged. Sign it on a personal device with a free Apple ID using a compatible sideloading tool."
+
+      - name: Downloadable unsigned IPA for iPad or iPhone
+        if: ${{ inputs.distribution != 'testflight' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: finflow-ios-unsigned-ipa
+          path: ${{ runner.temp }}/FinFlow-unsigned.ipa
+          retention-days: 7
+          if-no-files-found: error
+
       - name: Verify signing secrets
         if: ${{ inputs.distribution == 'testflight' }}
         shell: bash
