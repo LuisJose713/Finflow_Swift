@@ -147,6 +147,25 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath "$RUNNER_TEMP/FinFlowRelease" \
             CODE_SIGNING_ALLOWED=NO build 2>&1 | tee "$RUNNER_TEMP/finflow-release.log"
+      - name: Package unsigned IPA for personal signing
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/FinFlowRelease/Build/Products/Release-iphoneos/FinFlow.app"
+          test -f "$APP/Info.plist"
+          mkdir -p "$RUNNER_TEMP/finflow-ipa/Payload"
+          ditto "$APP" "$RUNNER_TEMP/finflow-ipa/Payload/FinFlow.app"
+          cd "$RUNNER_TEMP/finflow-ipa"
+          /usr/bin/zip -qry "$RUNNER_TEMP/FinFlow-unsigned.ipa" Payload
+      - name: Upload unsigned iPhone and iPad IPA
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: finflow-ios-unsigned-ipa
+          path: ${{ runner.temp }}/FinFlow-unsigned.ipa
+          retention-days: 7
+          if-no-files-found: error
       - name: Upload Release build log
         if: always()
         uses: actions/upload-artifact@v4

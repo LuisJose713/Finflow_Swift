@@ -171,7 +171,8 @@ struct TransactionsView: View {
     /// existing authenticated movement form. No photo is uploaded or saved.
     @MainActor
     private func readReceipt(_ selection: PhotosPickerItem) async {
-        guard !isReadingReceipt, session.isAuthenticated else { return }
+        guard isVisible, !isReadingReceipt, session.isAuthenticated,
+              let userID = session.user?.id else { return }
         isReadingReceipt = true
         defer {
             receiptPhoto = nil
@@ -186,7 +187,8 @@ struct TransactionsView: View {
             let recognized = try await Task.detached(priority: .userInitiated) {
                 try ReceiptReading.parse(bytes)
             }.value
-            guard session.isAuthenticated else { return }
+            guard isVisible, session.isAuthenticated, session.user?.id == userID,
+                  !showingCreate else { return }
             assistantDraft = AssistantTransactionDraft(
                 type: "expense", title: recognized.title, amount: recognized.amount
             )
@@ -197,6 +199,7 @@ struct TransactionsView: View {
                 : nil
             showingCreate = true
         } catch {
+            guard isVisible, session.isAuthenticated, session.user?.id == userID else { return }
             self.error = "No pudimos reconocer la factura. Prueba con una foto nítida o registra el gasto manualmente."
         }
     }
@@ -379,66 +382,69 @@ struct CreateTransactionView: View {
 
 /// Offline OCR for a selected receipt image. Heuristics never authorize a write.
 private enum ReceiptReading {
-    struct Draft: Sendable {
-        let title: String
-        let amount: Double?
-    }
-
-    static func parse(_ imageData: Data) throws -> Draft {
+    static func parse(_ imageData: Data) throws -> ReceiptTextParser.Draft {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.recognitionLanguages = ["es-ES", "en-US"]
         request.usesLanguageCorrection = true
         try VNImageRequestHandler(data: imageData, options: [:]).perform([request])
-        let lines = (request.results ?? []).compactMap {
-            $0.topCandidates(1).first?.string.trimmingCharacters(in: .whitespacesAndNewlines)
-        }.filter { !$0.isEmpty }
-        guard !lines.isEmpty else {
+        let lines = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+        guard let draft = ReceiptTextParser.parse(lines) else {
             throw NSError(domain: "FinFlowReceipt", code: 1,
                           userInfo: [NSLocalizedDescriptionKey: "No encontramos texto"])
         }
+        return draft
+    }
+}
+
+enum ReceiptTextParser {
+    struct Draft: Sendable {
+        let title: String
+        let amount: Double?
+    }
+
+    static func parse(_ recognizedLines: [String]) -> Draft? {
+        let lines = recognizedLines.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !lines.isEmpty else { return nil }
         let title = lines.prefix(8).first { text in
-            let normalized = text.folding(options: [.diacriticInsensitive, .caseInsensitive],
-                                          locale: Locale(identifier: "es_CO")).lowercased()
+            let normalized = normalize(text)
             return normalized.rangeOfCharacter(from: .letters) != nil &&
                 !["factura", "nit", "fecha", "telefono", "documento", "cliente",
                   "subtotal", "total", "cajero"].contains(where: normalized.contains)
         }.map { String($0.prefix(80)) } ?? "Compra de factura"
 
-        // Only a line explicitly labelled TOTAL or VALOR A PAGAR is allowed
-        // to prefill an amount. Never use an arbitrary price from the receipt.
-        let totalLine = lines.reversed().first { line in
-            let value = line.folding(options: [.diacriticInsensitive, .caseInsensitive],
-                                     locale: Locale(identifier: "es_CO")).lowercased()
-            return (value.contains("total") && !value.contains("subtotal")) ||
-                value.contains("valor a pagar")
+        let normalized = lines.map(normalize)
+        let payableLabel = #/(?:(?:(?:valor|importe|saldo)\s+)?(?:total\s+)?a\s+pagar|total\s+(?:de\s+la\s+)?factura)\b(.*)/#
+        let totalLabel = #/(?:(?:gran|importe|valor)\s+)?total\b(.*)/#
+        let payable = normalized.compactMap { $0.wholeMatch(of: payableLabel)?.output.1 }
+        let totals = payable.isEmpty ? normalized.compactMap { $0.wholeMatch(of: totalLabel)?.output.1 } : payable
+        let money = #/\s*[:=]?\s*(?:cop\s*)?\$?\s*([0-9]+(?:[.,][0-9]+)*)(?:\s+cop)?\s*/#
+        let amounts = Set(totals.compactMap { suffix -> Double? in
+            guard let token = suffix.wholeMatch(of: money)?.output.1 else { return nil }
+            return amount(from: token)
+        })
+        // Leave the amount blank when several plausible totals disagree.
+        return Draft(title: title, amount: amounts.count == 1 ? amounts.first : nil)
+    }
+
+    private static func normalize(_ line: String) -> String {
+        line.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "es_CO"))
+            .lowercased()
+    }
+
+    private static func amount(from token: Substring) -> Double? {
+        let normalized: String
+        if token.wholeMatch(of: #/[0-9]+(?:[.,][0-9]{1,2})?/#) != nil {
+            normalized = token.replacingOccurrences(of: ",", with: ".")
+        } else if token.wholeMatch(of: #/[0-9]{1,3}(?:\.[0-9]{3})+(?:,[0-9]{1,2})?/#) != nil {
+            normalized = token.replacingOccurrences(of: ".", with: "").replacingOccurrences(of: ",", with: ".")
+        } else if token.wholeMatch(of: #/[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?/#) != nil {
+            normalized = token.replacingOccurrences(of: ",", with: "")
+        } else {
+            return nil
         }
-        let pattern = try NSRegularExpression(pattern: #"\d[\d.,]*"#)
-        var amount: Double?
-        if let totalLine {
-            let ns = totalLine as NSString
-            if let token = pattern.matches(in: totalLine, range: NSRange(location: 0, length: ns.length)).last {
-                let value = ns.substring(with: token.range)
-                let separator = [value.lastIndex(of: ","), value.lastIndex(of: ".")]
-                    .compactMap { $0 }.max()
-                let normalized: String
-                if let separator {
-                    let tail = value.distance(from: value.index(after: separator), to: value.endIndex)
-                    if tail <= 2 {
-                        normalized = String(value[..<separator].filter { $0.isNumber }) +
-                            "." + String(value[value.index(after: separator)...])
-                    } else {
-                        normalized = String(value.filter { $0.isNumber })
-                    }
-                } else {
-                    normalized = value
-                }
-                if let number = Double(normalized), number > 0, number <= 1_000_000_000_000,
-                   (number * 100).rounded() == number * 100 {
-                    amount = number
-                }
-            }
-        }
-        return Draft(title: title, amount: amount)
+        guard let amount = Double(normalized), amount > 0, amount <= 1_000_000_000_000 else { return nil }
+        return amount
     }
 }

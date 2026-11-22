@@ -3,6 +3,23 @@ import UIKit
 @testable import FinFlow
 
 final class StorageAndAPITests: XCTestCase {
+    func testReceiptUsesAmountDueAndKeepsCents() {
+        let draft = ReceiptTextParser.parse([
+            "TIENDA", "TOTAL A PAGAR: COP 50.500,13", "TOTAL ARTÍCULOS 4",
+            "IVA TOTAL $5.000", "TOTAL PAGO EFECTIVO $60.000"
+        ])
+        XCTAssertEqual(draft?.title, "TIENDA")
+        XCTAssertEqual(draft?.amount, 50_500.13)
+        XCTAssertEqual(ReceiptTextParser.parse(["TIENDA", "TOTAL 0,29"])?.amount, 0.29)
+    }
+
+    func testReceiptLeavesAmbiguousOrMalformedAmountsBlank() {
+        XCTAssertNil(ReceiptTextParser.parse(["TIENDA", "TOTAL ARTÍCULOS 4"])?.amount)
+        XCTAssertNil(ReceiptTextParser.parse(["TIENDA", "TOTAL 12.000", "TOTAL 15.000"])?.amount)
+        XCTAssertNil(ReceiptTextParser.parse(["TIENDA", "TOTAL $12.34.567"])?.amount)
+        XCTAssertNil(ReceiptTextParser.parse(["TIENDA", "TOTAL $-12.000"])?.amount)
+    }
+
     @MainActor func testDrawerHasPriorityOverTheLeftBackEdgeOnly() {
         let bridge = DrawerPanGesture(enabled: true, isOpen: false, drawerWidth: 320,
             changed: { _ in }, ended: { _ in }, cancelled: {})
