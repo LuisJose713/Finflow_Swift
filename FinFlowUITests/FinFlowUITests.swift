@@ -209,6 +209,21 @@ final class FinFlowUITests: XCTestCase {
         XCTAssertTrue(app.buttons["dashboard.addExpense"].waitForExistence(timeout: 8))
     }
 
+    func testEditingIncomePreservesItsOriginalCategory() {
+        let app = launch()
+        signIn(app)
+        tap(app.tabBars.buttons["Movimientos"])
+        let row = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH %@", "Proyecto independiente,")).firstMatch
+        reveal(row, in: app)
+        row.swipeLeft()
+        tap(app.buttons["Editar"])
+        XCTAssertTrue(app.textFields["Título"].waitForExistence(timeout: 8))
+        let category = app.buttons["transaction.category"]
+        XCTAssertTrue(category.waitForExistence(timeout: 8))
+        XCTAssertTrue(category.label.contains("Honorarios") || (category.value as? String) == "Honorarios")
+    }
+
     func testServiceFailureDoesNotInventBalance() {
         let app = launch(failure: true); signIn(app)
         XCTAssertTrue(app.otherElements["dashboard.error"].waitForExistence(timeout: 10)

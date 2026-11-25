@@ -35,12 +35,13 @@ private final class PreviewServer: @unchecked Sendable {
         ["id": 1, "description": "Nómina de noviembre", "amount": 3200000, "type": "income", "categoryId": 1, "date": "2026-11-10", "status": "completed", "currency": "COP"],
         ["id": 2, "description": "Compra del supermercado", "amount": 284500.5, "type": "expense", "categoryId": 2, "date": "2026-11-11", "status": "completed", "currency": "COP"],
         ["id": 3, "description": "Café y desayuno", "amount": 18500, "type": "expense", "categoryId": 2, "date": "2026-11-12", "status": "completed", "currency": "COP"],
-        ["id": 4, "description": "Proyecto independiente", "amount": 450000, "type": "income", "categoryId": 1, "date": "2026-11-12", "status": "pending", "currency": "COP"]
+        ["id": 4, "description": "Proyecto independiente", "amount": 450000, "type": "income", "categoryId": 4, "date": "2026-11-12", "status": "pending", "currency": "COP"]
     ]
     private let categories: [[String: Any]] = [
         ["id": 1, "name": "Trabajo", "type": "income"],
         ["id": 2, "name": "Alimentación", "type": "expense"],
-        ["id": 3, "name": "Transporte", "type": "expense", "userId": 987654]
+        ["id": 3, "name": "Transporte", "type": "expense", "userId": 987654],
+        ["id": 4, "name": "Honorarios", "type": "income", "userId": 987654]
     ]
     private var goals: [[String: Any]] = [
         ["id": 1, "title": "Fondo de tranquilidad", "targetAmount": 3000000, "currentAmount": 1200000, "deadline": "2027-05-01", "status": "active", "description": "Un paso a la vez."]

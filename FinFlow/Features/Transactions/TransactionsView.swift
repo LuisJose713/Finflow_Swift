@@ -318,7 +318,17 @@ struct CreateTransactionView: View {
                     Section { Text(accountNotice).font(.footnote).foregroundStyle(.secondary) }
                 }
                 Section("Movimiento") {
-                    Picker("Tipo", selection: $type) { Text("Gasto").tag("expense"); Text("Ingreso").tag("income") }.pickerStyle(.segmented)
+                    Picker("Tipo", selection: Binding(
+                        get: { type },
+                        set: { newType in
+                            guard newType != type else { return }
+                            type = newType
+                            categoryId = suitableCategories.first?.id ?? 0
+                        }
+                    )) {
+                        Text("Gasto").tag("expense")
+                        Text("Ingreso").tag("income")
+                    }.pickerStyle(.segmented)
                     TextField("Título", text: $description)
                         .onChange(of: description) { _, value in description = String(value.prefix(255)) }
                     COPAmountField("Monto en COP", text: $amount)
@@ -328,7 +338,12 @@ struct CreateTransactionView: View {
                         Text("Cancelado").tag("cancelled")
                     }
                     DatePicker("Fecha", selection: $date, displayedComponents: .date)
-                    if !suitableCategories.isEmpty { Picker("Categoría", selection: $categoryId) { ForEach(suitableCategories) { Text($0.name).tag($0.id) } } }
+                    if !suitableCategories.isEmpty {
+                        Picker("Categoría", selection: $categoryId) {
+                            ForEach(suitableCategories) { Text($0.name).tag($0.id) }
+                        }
+                        .accessibilityIdentifier("transaction.category")
+                    }
                     if !accounts.filter({ !$0.archived }).isEmpty { Picker("Billetera", selection: $accountId) { Text("Sin billetera").tag(0); ForEach(accounts.filter { !$0.archived }) { Text($0.name).tag($0.id) } } }
                 }
                 if let error { Section { Text(error).foregroundStyle(.red) } }
@@ -344,7 +359,7 @@ struct CreateTransactionView: View {
                     description = editing.description
                     status = editing.status ?? "completed"
                     amount = String(editing.amount)
-                    type = editing.type
+                    type = editing.type.lowercased()
                     categoryId = editing.categoryId
                     accountId = editing.accountId ?? 0
                     date = editing.parsedDate
@@ -357,10 +372,10 @@ struct CreateTransactionView: View {
                     }
                 }
             }
-            .onChange(of: type) { _, newType in categoryId = categories.first(where: { $0.type.lowercased() == newType })?.id ?? 0 }
         }
     }
-    private func save() async {
+    @MainActor private func save() async {
+        guard !isSaving else { return }
         guard !description.trimmingCharacters(in: .whitespaces).isEmpty, suitableCategories.contains(where: { $0.id == categoryId }), let value = Double(amount.replacingOccurrences(of: ",", with: ".")), value.isFinite, value > 0 else { error = "Ingresa un título y un monto válido."; return }
         isSaving = true; defer { isSaving = false }
         var dto = CreateTransactionRequest(description: description, amount: value, type: type, categoryId: categoryId, date: DateFormatters.isoDay.string(from: date), notes: nil)
